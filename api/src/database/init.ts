@@ -1,0 +1,33 @@
+import { DatabaseService } from './DatabaseService';
+
+export async function initializeDatabase() {
+  try {
+    const db = DatabaseService.getInstance();
+    await db.query(`
+      IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Users]') AND type in (N'U'))
+      BEGIN
+        CREATE TABLE [dbo].[Users] (
+          [id] INT IDENTITY(1,1) PRIMARY KEY,
+          [email] NVARCHAR(255) NOT NULL UNIQUE,
+          [password] NVARCHAR(255) NOT NULL,
+          [name] NVARCHAR(255) NOT NULL,
+          [role] NVARCHAR(50) NOT NULL DEFAULT 'user',
+          [createdAt] DATETIME NOT NULL DEFAULT GETDATE(),
+          [updatedAt] DATETIME NOT NULL DEFAULT GETDATE()
+        );
+
+        -- Create default admin user if needed
+        IF NOT EXISTS (SELECT * FROM [dbo].[Users] WHERE [email] = 'admin@example.com')
+        BEGIN
+          INSERT INTO [dbo].[Users] ([email], [password], [name], [role])
+          VALUES ('admin@example.com', '$2b$10$XkpOQj7XqU9s9ZQ5q5Z5Y.9Z5q5Y.9Z5q5Y.9Z5q5Y.', 'Admin', 'admin')
+        END
+      END
+    `);
+    
+    console.log('Database initialized successfully');
+  } catch (error) {
+    console.error('Error initializing database:', error);
+    throw error;
+  }
+}
