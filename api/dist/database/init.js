@@ -1,11 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.initializeDatabase = initializeDatabase;
-const connection_1 = require("./connection");
+const DatabaseService_1 = require("./DatabaseService");
 async function initializeDatabase() {
     try {
-        // Create Users table if it doesn't exist
-        await connection_1.pool.request().query(`
+        const db = DatabaseService_1.DatabaseService.getInstance();
+        await db.query(`
       IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[Users]') AND type in (N'U'))
       BEGIN
         CREATE TABLE [dbo].[Users] (
@@ -22,14 +22,27 @@ async function initializeDatabase() {
         IF NOT EXISTS (SELECT * FROM [dbo].[Users] WHERE [email] = 'admin@example.com')
         BEGIN
           INSERT INTO [dbo].[Users] ([email], [password], [name], [role])
-          VALUES (
-            'admin@example.com',
-            -- Default password is 'admin123', should be changed immediately
-            '$2b$10$rZR5cZe8lLc7htqkDW0pUOvhTiXq0UEQW1CdE4PtDq.BpXPX1sOxK',
-            'Admin',
-            'admin'
-          );
+          VALUES ('admin@example.com', '$2b$10$XkpOQj7XqU9s9ZQ5q5Z5Y.9Z5q5Y.9Z5q5Y.9Z5q5Y.', 'Admin', 'admin')
         END
+      END
+    `);
+        // Create UserDatabases table for tracking database ownership
+        await db.query(`
+      IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[UserDatabases]') AND type in (N'U'))
+      BEGIN
+        CREATE TABLE [dbo].[UserDatabases] (
+          [id] INT IDENTITY(1,1) PRIMARY KEY,
+          [userId] INT NOT NULL,
+          [databaseName] NVARCHAR(255) NOT NULL,
+          [createdAt] DATETIME2 DEFAULT GETDATE(),
+          [updatedAt] DATETIME2 DEFAULT GETDATE(),
+          FOREIGN KEY (userId) REFERENCES Users(id) ON DELETE CASCADE,
+          UNIQUE(userId, databaseName)
+        );
+
+        -- Create indexes for faster lookups
+        CREATE INDEX IX_UserDatabases_UserId ON UserDatabases(userId);
+        CREATE INDEX IX_UserDatabases_DatabaseName ON UserDatabases(databaseName);
       END
     `);
         console.log('Database initialized successfully');

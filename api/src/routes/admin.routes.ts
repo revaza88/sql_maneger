@@ -1,0 +1,19 @@
+import { Router } from 'express';
+import { AdminController } from '../controllers/admin.controller'; // Corrected import path
+import { authenticate } from '../middleware/auth';
+import { authorizeAdmin } from '../middleware/authorizeAdmin';
+
+export const adminRouter = Router();
+const adminController = new AdminController();
+
+// All admin routes should be authenticated and authorized
+adminRouter.use(authenticate);
+adminRouter.use((req, res, next) => authorizeAdmin(req, res, next)); 
+
+// Example admin route
+adminRouter.get('/users', adminController.getUsers.bind(adminController));
+
+// Add other admin-specific routes here
+adminRouter.put('/users/:userId/role', adminController.updateUserRole);
+adminRouter.delete('/users/:userId', adminController.deleteUser);
+

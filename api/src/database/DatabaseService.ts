@@ -1,5 +1,7 @@
 import sql from 'mssql';
 import { config } from '../config';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export class DatabaseService {
   private static instance: DatabaseService;
@@ -419,6 +421,174 @@ export class DatabaseService {
     } catch (error) {
       console.error('Error retrieving backup history:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Create a backup file and return the file path for download
+   */
+  public async createBackupForDownload(databaseName: string): Promise<string> {
+    try {
+      console.log(`Starting backup for download: ${databaseName}`);
+      await this.ensureConnection();
+      console.log('Database connection established for backup');
+      
+      // Create a temporary backup directory if it doesn't exist
+      const backupDir = path.join(process.cwd(), 'temp_backups');
+      console.log(`Backup directory: ${backupDir}`);
+      
+      if (!fs.existsSync(backupDir)) {
+        console.log('Creating backup directory...');
+        fs.mkdirSync(backupDir, { recursive: true });
+      }
+      
+      // Generate unique filename with timestamp
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupPath = path.join(backupDir, `${databaseName}_${timestamp}.bak`);
+      console.log(`Generated backup path: ${backupPath}`);
+      
+      // SQL Server requires Windows-style paths
+      const sqlServerPath = backupPath.replace(/\//g, '\\');
+      console.log(`SQL Server path: ${sqlServerPath}`);
+      
+      const query = `
+        BACKUP DATABASE [${databaseName}] 
+        TO DISK = '${sqlServerPath}'
+        WITH 
+          FORMAT,
+          INIT,
+          NAME = '${databaseName} Full Backup - ${new Date().toISOString()}'
+      `;
+      
+      console.log(`Executing backup query: ${query}`);
+      await this.query(query);
+      console.log(`Backup completed successfully: ${backupPath}`);
+      
+      return backupPath;
+    } catch (error) {
+      console.error('Error creating backup for download:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Restore database from uploaded backup file
+   */
+  public async restoreFromUploadedFile(databaseName: string, uploadedFilePath: string): Promise<void> {
+    try {
+      await this.ensureConnection();
+      
+      // Verify the uploaded file exists
+      if (!fs.existsSync(uploadedFilePath)) {
+        throw new Error(`Uploaded backup file not found: ${uploadedFilePath}`);
+      }
+      
+      // SQL Server requires Windows-style paths
+      const sqlServerPath = uploadedFilePath.replace(/\//g, '\\');
+      
+      // First, get the logical file names from the backup
+      const headerQuery = `
+        RESTORE HEADERONLY 
+        FROM DISK = '${sqlServerPath}'
+      `;
+      
+      const fileListQuery = `
+        RESTORE FILELISTONLY 
+        FROM DISK = '${sqlServerPath}'
+      `;
+      
+      console.log('Reading backup file header and file list...');
+      const fileListResult = await this.query(fileListQuery);
+      
+      if (!fileListResult || fileListResult.length === 0) {
+        throw new Error('Invalid backup file or unable to read file structure');
+      }
+      
+      // Generate new file paths for the restored database
+      const dataFiles = fileListResult.filter((file: any) => file.Type === 'D');
+      const logFiles = fileListResult.filter((file: any) => file.Type === 'L');
+      
+      if (dataFiles.length === 0) {
+        throw new Error('No data files found in backup');
+      }
+      
+      // Build the MOVE clauses for each file
+      let moveClause = '';
+      
+      dataFiles.forEach((file: any, index: number) => {
+        const newDataPath = `C:\\Program Files\\Microsoft SQL Server\\MSSQL16.SQLEXPRESS\\MSSQL\\DATA\\${databaseName}${index > 0 ? `_${index}` : ''}.mdf`;
+        moveClause += `MOVE '${file.LogicalName}' TO '${newDataPath}', `;
+      });
+      
+      logFiles.forEach((file: any, index: number) => {
+        const newLogPath = `C:\\Program Files\\Microsoft SQL Server\\MSSQL16.SQLEXPRESS\\MSSQL\\DATA\\${databaseName}${index > 0 ? `_${index}` : ''}.ldf`;
+        moveClause += `MOVE '${file.LogicalName}' TO '${newLogPath}', `;
+      });
+      
+      // Remove trailing comma and space
+      moveClause = moveClause.slice(0, -2);
+      
+      const restoreQuery = `
+        RESTORE DATABASE [${databaseName}] 
+        FROM DISK = '${sqlServerPath}'
+        WITH 
+          ${moveClause},
+          REPLACE,
+          RECOVERY
+      `;
+      
+      console.log(`Restoring database from uploaded file: ${databaseName} <- ${sqlServerPath}`);
+      await this.query(restoreQuery);
+      
+      console.log(`Database ${databaseName} restored successfully from uploaded file`);
+    } catch (error) {
+      console.error('Error restoring from uploaded file:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Clean up temporary backup files
+   */
+  public async cleanupTempBackup(filePath: string): Promise<void> {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`Cleaned up temporary backup file: ${filePath}`);
+      }
+    } catch (error) {
+      console.error('Error cleaning up temporary backup file:', error);
+      // Don't throw - this is cleanup, not critical
+    }
+  }
+  
+  /**
+   * Get list of uploaded backup files
+   */
+  public async getUploadedBackups(): Promise<Array<{name: string, size: number, uploadDate: Date}>> {
+    try {
+      const uploadsDir = path.join(process.cwd(), 'uploads');
+      
+      if (!fs.existsSync(uploadsDir)) {
+        return [];
+      }
+      
+      const files = fs.readdirSync(uploadsDir);
+      const bakFiles = files.filter(file => file.toLowerCase().endsWith('.bak'));
+      
+      return bakFiles.map(file => {
+        const filePath = path.join(uploadsDir, file);
+        const stats = fs.statSync(filePath);
+        
+        return {
+          name: file,
+          size: stats.size,
+          uploadDate: stats.mtime
+        };
+      });
+    } catch (error) {
+      console.error('Error getting uploaded backups:', error);
+      return [];
     }
   }
 }

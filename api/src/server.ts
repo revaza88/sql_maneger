@@ -4,13 +4,32 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { config } from './config';
+import { config } from './config/index';
 import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth';
 import { databaseRouter } from './routes/database.routes';
+import profileRouter from './routes/profile.routes';
+import { adminRouter } from './routes/admin.routes'; // Added adminRouter import
+import sqlServerRouter from './routes/sqlserver.routes';
 import { DatabaseService } from './database/DatabaseService';
+import { initializeDatabase } from './database/init';
 
 const app = express();
+
+// Enable CORS for all routes and preflight requests
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    if (config.corsOrigin.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
+}));
 
 // Initialize database connection
 DatabaseService.getInstance();
@@ -24,16 +43,6 @@ const io = new Server(httpServer, {
 
 // Middleware
 app.use(helmet());
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || config.corsOrigin.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true
-}));
 app.use(express.json());
 
 // Rate limiting
@@ -46,6 +55,9 @@ app.use(limiter);
 // Routes
 app.use('/api/auth', authRouter);
 app.use('/api/databases', databaseRouter);
+app.use('/api/profile', profileRouter);
+app.use('/api/admin', adminRouter); // Added adminRouter usage
+app.use('/api/sqlserver', sqlServerRouter);
 
 // Error handling
 app.use(errorHandler);
@@ -68,6 +80,11 @@ async function startServer() {
     const dbService = DatabaseService.getInstance();
     await dbService.testConnection();
     console.log('Database connection verified successfully');
+
+    // Initialize database tables
+    console.log('Initializing database tables...');
+    await initializeDatabase();
+    console.log('Database tables initialized successfully');
 
     // Start HTTP server
     const port = config.port;

@@ -23,11 +23,29 @@ const poolConfig: sql.config = {
 
 export const pool = new sql.ConnectionPool(poolConfig);
 
-// Connect to database
-pool.connect().then(() => {
-  console.log('Connected to MSSQL database');
-}).catch(err => {
-  console.error('Database connection failed:', err);
+let connectionPromise: Promise<sql.ConnectionPool> | null = null;
+
+export function ensureConnected(): Promise<sql.ConnectionPool> {
+  if (!connectionPromise) {
+    connectionPromise = pool.connect()
+      .then(connectedPool => {
+        console.log('Connected to MSSQL database (via ensureConnected)');
+        return connectedPool;
+      })
+      .catch(err => {
+        console.error('Database connection failed (via ensureConnected):', err);
+        connectionPromise = null; // Reset on failure to allow retry
+        throw err; // Re-throw to propagate the error
+      });
+  }
+  return connectionPromise;
+}
+
+// Initial connection attempt (optional, can be removed if all access goes via ensureConnected)
+ensureConnected().catch(err => {
+  // The error is already logged by ensureConnected,
+  // but you might want to do additional handling here if the initial auto-connect fails.
+  console.error("Initial auto-connection failed. Application might not work correctly until connection is established.");
 });
 
 // Handle pool errors

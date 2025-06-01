@@ -6,24 +6,41 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.authorize = exports.authenticate = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const config_1 = require("../config");
-const user_model_1 = require("../models/user.model");
 const authenticate = async (req, res, next) => {
     try {
+        console.log('Authenticating request...');
         const token = req.header('Authorization')?.replace('Bearer ', '');
         if (!token) {
-            return res.status(401).json({ message: 'Authentication required' });
+            console.log('No token provided');
+            res.status(401).json({
+                status: 'error',
+                message: 'Authentication required: No token provided'
+            });
+            return;
         }
-        const decoded = jsonwebtoken_1.default.verify(token, config_1.config.jwt.secret);
-        // Verify user exists
-        const user = await user_model_1.UserModel.findById(decoded.id);
-        if (!user) {
-            return res.status(401).json({ message: 'User not found' });
+        try {
+            const decoded = jsonwebtoken_1.default.verify(token, config_1.config.jwt.secret);
+            req.user = decoded;
+            console.log('Token verified successfully for user:', decoded.email);
+            next();
         }
-        req.user = decoded;
-        next();
+        catch (jwtError) {
+            console.error('JWT verification failed:', jwtError);
+            res.status(401).json({
+                status: 'error',
+                message: 'Authentication failed: Invalid token'
+            });
+            return;
+        }
     }
     catch (error) {
-        res.status(401).json({ message: 'Invalid token' });
+        console.error('Auth middleware error:', error);
+        res.status(500).json({
+            status: 'error',
+            message: 'Authentication error',
+            details: error.message
+        });
+        return;
     }
 };
 exports.authenticate = authenticate;

@@ -55,8 +55,9 @@ export default function RegisterPage() {
       setAuth(response.user, response.token)
       router.push('/databases')
       toast.success('Registered successfully')
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to register')
+    } catch (error: unknown) {
+      const apiError = error as { response?: { data?: { message?: string } } }
+      toast.error(apiError.response?.data?.message || 'Failed to register')
     } finally {
       setIsLoading(false)
     }

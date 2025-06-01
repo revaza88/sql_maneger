@@ -24,6 +24,26 @@ export async function initializeDatabase() {
         END
       END
     `);
+
+    // Create UserDatabases table for tracking database ownership
+    await db.query(`
+      IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[UserDatabases]') AND type in (N'U'))
+      BEGIN
+        CREATE TABLE [dbo].[UserDatabases] (
+          [id] INT IDENTITY(1,1) PRIMARY KEY,
+          [userId] INT NOT NULL,
+          [databaseName] NVARCHAR(255) NOT NULL,
+          [createdAt] DATETIME2 DEFAULT GETDATE(),
+          [updatedAt] DATETIME2 DEFAULT GETDATE(),
+          FOREIGN KEY (userId) REFERENCES Users(id) ON DELETE CASCADE,
+          UNIQUE(userId, databaseName)
+        );
+
+        -- Create indexes for faster lookups
+        CREATE INDEX IX_UserDatabases_UserId ON UserDatabases(userId);
+        CREATE INDEX IX_UserDatabases_DatabaseName ON UserDatabases(databaseName);
+      END
+    `);
     
     console.log('Database initialized successfully');
   } catch (error) {

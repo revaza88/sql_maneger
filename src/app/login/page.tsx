@@ -48,8 +48,9 @@ export default function LoginPage() {
       setAuth(response.user, response.token)
       router.push('/databases')
       toast.success('Logged in successfully')
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to login')
+    } catch (error: unknown) {
+      const apiError = error as { response?: { data?: { message?: string } } }
+      toast.error(apiError.response?.data?.message || 'Failed to login')
     } finally {
       setIsLoading(false)
     }
@@ -103,9 +104,12 @@ export default function LoginPage() {
               </Button>
             </form>
           </Form>
-          <div className="mt-4 text-center text-sm">
-            <Link href="/register" className="text-primary hover:underline">
+          <div className="mt-4 text-center text-sm space-y-2">
+            <Link href="/register" className="text-primary hover:underline block">
               Don&apos;t have an account? Register
+            </Link>
+            <Link href="/admin/login" className="text-red-600 hover:underline text-xs block">
+              Administrator Login
             </Link>
           </div>
         </CardContent>

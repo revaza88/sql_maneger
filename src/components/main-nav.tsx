@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Database, LogOut, Moon, Settings, Sun } from 'lucide-react'
+import { Database, LogOut, Moon, Sun, User } from 'lucide-react'
 import { useTheme } from 'next-themes'
 
 export function MainNav() {
@@ -25,7 +25,9 @@ export function MainNav() {
 
   const navigation = [
     { name: 'Databases', href: '/databases' },
-    { name: 'Settings', href: '/settings' },
+    { name: 'SQL Server', href: '/sqlserver' },
+    { name: 'Profile', href: '/profile' },
+    ...(user?.role?.toLowerCase() === 'admin' ? [{ name: 'Admin Panel', href: '/admin' }] : []),
   ]
 
   return (
@@ -82,6 +84,20 @@ export function MainNav() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
+              <DropdownMenuItem asChild>
+                <Link href="/profile" className="flex items-center cursor-pointer">
+                  <User className="mr-2 h-4 w-4" />
+                  <span>Profile</span>
+                </Link>
+              </DropdownMenuItem>
+              {user?.role?.toLowerCase() === 'admin' && (
+                <DropdownMenuItem asChild>
+                  <Link href="/admin" className="flex items-center cursor-pointer">
+                    <Database className="mr-2 h-4 w-4" />
+                    <span>Admin Panel</span>
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => handleLogout()}>
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Log out</span>

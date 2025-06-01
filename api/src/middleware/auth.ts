@@ -21,17 +21,18 @@ export const authenticate = async (
   req: Request,
   res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   try {
     console.log('Authenticating request...');
     const token = req.header('Authorization')?.replace('Bearer ', '');
 
     if (!token) {
       console.log('No token provided');
-      return res.status(401).json({ 
+      res.status(401).json({ 
         status: 'error',
         message: 'Authentication required: No token provided' 
       });
+      return;
     }
 
     try {
@@ -41,10 +42,11 @@ export const authenticate = async (
       next();
     } catch (jwtError) {
       console.error('JWT verification failed:', jwtError);
-      return res.status(401).json({ 
+      res.status(401).json({ 
         status: 'error',
         message: 'Authentication failed: Invalid token'
       });
+      return;
     }
   } catch (error: any) {
     console.error('Auth middleware error:', error);
@@ -53,6 +55,7 @@ export const authenticate = async (
       message: 'Authentication error',
       details: error.message 
     });
+    return;
   }
 };
 

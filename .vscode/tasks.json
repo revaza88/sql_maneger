@@ -2,14 +2,14 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
+			"label": "Start API Server",
 			"type": "shell",
-			"label": "Start Development Server",
-			"command": "npm run dev",
+			"command": "npx ts-node-dev --respawn --transpile-only --ignore-watch node_modules src/server.ts",
+			"group": "build",
 			"isBackground": true,
 			"problemMatcher": [
 				"$tsc"
-			],
-			"group": "build"
+			]
 		}
 	]
 }

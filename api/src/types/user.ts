@@ -4,6 +4,8 @@ export interface User {
   password: string;
   name: string;
   role: 'admin' | 'user';
+  sqlServerUsername?: string;
+  sqlServerPassword?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -13,4 +15,16 @@ export interface UserCreate {
   password: string;
   name: string;
   role?: 'admin' | 'user';
+  sqlServerUsername?: string;
+  sqlServerPassword?: string;
+}
+
+export interface UserProfileUpdate {
+  name?: string;
+  email?: string;
+}
+
+export interface UserPasswordUpdate {
+  currentPassword: string;
+  newPassword: string;
 }
