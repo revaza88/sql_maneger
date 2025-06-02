@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { api as backendApi } from '@/lib/api'; // Import the configured API client
 import { toast } from 'sonner';
 import { Copy, Database, Server, User, Lock, Plus, Check } from 'lucide-react';
 import { LoadingSpinner } from '@/components/loading-spinner';
@@ -38,17 +39,12 @@ export default function SQLServerPage() {
       loadAvailableDatabases();
     }
   }, [token]);
-
   const checkSQLServerUser = async () => {
     try {
-      const response = await fetch('/api/sqlserver/check', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
+      const response = await backendApi.get('/sqlserver/check');
+      
+      if (response.status === 200) {
+        const data = response.data;
         setHasSQLServerUser(data.hasSQLServerUser);
         
         if (data.hasSQLServerUser) {
@@ -62,17 +58,12 @@ export default function SQLServerPage() {
       setLoading(false);
     }
   };
-
   const loadCredentials = async () => {
     try {
-      const response = await fetch('/api/sqlserver/credentials', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
+      const response = await backendApi.get('/sqlserver/credentials');
+      
+      if (response.status === 200) {
+        const data = response.data;
         setCredentials(data);
       }
     } catch (error) {
@@ -80,17 +71,12 @@ export default function SQLServerPage() {
       toast.error('Failed to load SQL Server credentials');
     }
   };
-
   const loadAvailableDatabases = async () => {
     try {
-      const response = await fetch('/api/sqlserver/databases', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
+      const response = await backendApi.get('/sqlserver/databases');
+      
+      if (response.status === 200) {
+        const data = response.data;
         setAvailableDatabases(data.databases || []);
       }
     } catch (error) {
@@ -98,20 +84,13 @@ export default function SQLServerPage() {
       toast.error('Failed to load available databases');
     }
   };
-
   const createSQLServerUser = async () => {
     setCreating(true);
     try {
-      const response = await fetch('/api/sqlserver/create-user', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await backendApi.post('/sqlserver/create-user');
 
-      if (response.ok) {
-        const data = await response.json();
+      if (response.status === 200 || response.status === 201) {
+        const data = response.data;
         setCredentials({
           username: data.username,
           password: data.password,
@@ -121,17 +100,15 @@ export default function SQLServerPage() {
         setHasSQLServerUser(true);
         toast.success('SQL Server user created successfully!');
       } else {
-        const error = await response.json();
-        toast.error(error.message || 'Failed to create SQL Server user');
+        toast.error(response.data?.message || 'Failed to create SQL Server user');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating SQL Server user:', error);
-      toast.error('Failed to create SQL Server user');
+      toast.error(error.response?.data?.message || 'Failed to create SQL Server user');
     } finally {
       setCreating(false);
     }
   };
-
   const grantDatabaseAccess = async () => {
     if (!selectedDatabase) {
       toast.error('Please select a database');
@@ -140,26 +117,20 @@ export default function SQLServerPage() {
 
     setGranting(true);
     try {
-      const response = await fetch('/api/sqlserver/grant-access', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ databaseName: selectedDatabase }),
+      const response = await backendApi.post('/sqlserver/grant-access', { 
+        databaseName: selectedDatabase 
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      if (response.status === 200) {
+        const data = response.data;
         toast.success(data.message);
         setSelectedDatabase('');
       } else {
-        const error = await response.json();
-        toast.error(error.message || 'Failed to grant database access');
+        toast.error(response.data?.message || 'Failed to grant database access');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error granting database access:', error);
-      toast.error('Failed to grant database access');
+      toast.error(error.response?.data?.message || 'Failed to grant database access');
     } finally {
       setGranting(false);
     }

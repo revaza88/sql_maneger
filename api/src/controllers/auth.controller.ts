@@ -19,10 +19,10 @@ const loginSchema = z.object({
 });
 
 export class AuthController {
-  static async register(req: Request, res: Response, next: NextFunction) {
+  async register(req: Request<any, any, any>, res: Response<any>, next: NextFunction): Promise<Response<any>> {
     try {
       const validatedData = registerSchema.parse(req.body);
-      
+
       // Check if user already exists
       const existingUser = await UserModel.findByEmail(validatedData.email);
       if (existingUser) {
@@ -30,8 +30,12 @@ export class AuthController {
       }
 
       // Create new user
-      const user = await UserModel.createUser(validatedData);
-      
+      const user = await UserModel.createUser({
+        email: validatedData.email,
+        password: validatedData.password,
+        name: validatedData.name
+      });
+
       // Automatically create SQL Server credentials for the new user
       try {
         const sqlCredentials = await SQLServerUserService.createSQLServerUser(user.id, user.email);
@@ -41,7 +45,7 @@ export class AuthController {
         console.error('Failed to create SQL Server credentials during registration:', sqlError);
         // Don't fail registration if SQL Server creation fails
       }
-      
+
       // Generate token
       const token = jwt.sign(
         { id: user.id, email: user.email, role: user.role },
@@ -49,7 +53,7 @@ export class AuthController {
         { expiresIn: config.jwt.expiresIn } as SignOptions
       );
 
-      res.status(201).json({
+      return res.status(201).json({
         message: 'User registered successfully',
         token,
         user: {
@@ -60,32 +64,28 @@ export class AuthController {
         }
       });
     } catch (error) {
-      // Add logging to capture errors
       console.error('Error in register method:', error);
       next(error);
     }
   }
 
-  static async login(req: Request, res: Response, next: NextFunction) {
+  async login(req: Request<any, any, any>, res: Response<any>, next: NextFunction): Promise<Response<any>> {
     try {
       const validatedData = loginSchema.parse(req.body);
-      
+
       // Find user
       const user = await UserModel.findByEmail(validatedData.email);
       if (!user) {
-        // More specific error for user not found
         return res.status(401).json({ message: 'User with this email not found.' });
       }
 
       // Verify password
-      // Ensure user.password is not undefined or null before comparison
       if (!user.password) {
         console.error(`User ${user.email} has no password set in the database.`);
         return res.status(500).json({ message: 'Authentication error. Please contact support.' });
       }
       const isValidPassword = await bcrypt.compare(validatedData.password, user.password);
       if (!isValidPassword) {
-        // More specific error for incorrect password
         return res.status(401).json({ message: 'Incorrect password. Please try again.' });
       }
 
@@ -96,7 +96,7 @@ export class AuthController {
         { expiresIn: config.jwt.expiresIn } as SignOptions
       );
 
-      res.json({
+      return res.json({
         message: 'Login successful',
         token,
         user: {
@@ -107,9 +107,7 @@ export class AuthController {
         }
       });
     } catch (error) {
-      // Log the error for server-side debugging
-      console.error('Login error:', error); 
-      // Pass to the global error handler for consistent response format
+      console.error('Login error:', error);
       next(error);
     }
   }

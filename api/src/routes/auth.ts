@@ -3,5 +3,7 @@ import { AuthController } from '../controllers/auth.controller';
 
 export const authRouter = Router();
 
-authRouter.post('/register', AuthController.register.bind(AuthController));
-authRouter.post('/login', AuthController.login.bind(AuthController));
+const authController = new AuthController();
+
+authRouter.post('/register', authController.register.bind(authController));
+authRouter.post('/login', authController.login.bind(authController));

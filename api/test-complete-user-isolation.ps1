@@ -11,7 +11,7 @@ $ApiBase = "http://localhost:3001/api"
 # Test 1: Server Health Check
 Write-Host "1. Testing server connectivity..."
 try {
-    $healthTest = Invoke-RestMethod -Uri "$ApiBase/databases/list" -Method GET -ErrorAction Stop
+    Invoke-RestMethod -Uri "$ApiBase/databases/list" -Method GET -ErrorAction Stop
     Write-Host "❌ Security Issue: Unauthenticated access allowed!" -ForegroundColor Red
 } catch {
     if ($_.Exception.Response.StatusCode -eq "Unauthorized") {
@@ -58,14 +58,13 @@ try {
 
 # Test 3: Database Creation
 Write-Host "`n3. Testing database creation..."
-
 $headers1 = @{ Authorization = "Bearer $token1" }
 $headers2 = @{ Authorization = "Bearer $token2" }
 
 # User 1 creates database
 $db1Data = @{ name = "user1_private_db" } | ConvertTo-Json
 try {
-    $db1Response = Invoke-RestMethod -Uri "$ApiBase/databases" -Method POST -Body $db1Data -ContentType "application/json" -Headers $headers1
+    Invoke-RestMethod -Uri "$ApiBase/databases" -Method POST -Body $db1Data -ContentType "application/json" -Headers $headers1
     Write-Host "✅ User 1 created database successfully" -ForegroundColor Green
 } catch {
     Write-Host "❌ User 1 database creation failed: $($_.Exception.Message)" -ForegroundColor Red
@@ -74,7 +73,7 @@ try {
 # User 2 creates database
 $db2Data = @{ name = "user2_private_db" } | ConvertTo-Json
 try {
-    $db2Response = Invoke-RestMethod -Uri "$ApiBase/databases" -Method POST -Body $db2Data -ContentType "application/json" -Headers $headers2
+    Invoke-RestMethod -Uri "$ApiBase/databases" -Method POST -Body $db2Data -ContentType "application/json" -Headers $headers2
     Write-Host "✅ User 2 created database successfully" -ForegroundColor Green
 } catch {
     Write-Host "❌ User 2 database creation failed: $($_.Exception.Message)" -ForegroundColor Red
@@ -118,7 +117,7 @@ $queryData = @{ query = "SELECT DB_NAME() AS current_db" } | ConvertTo-Json
 if ($user1DbNames.Count -gt 0) {
     $user1FirstDb = $user1DbNames[0]
     try {
-        $unauthorizedAccess = Invoke-RestMethod -Uri "$ApiBase/databases/$user1FirstDb/query" -Method POST -Body $queryData -ContentType "application/json" -Headers $headers2
+        Invoke-RestMethod -Uri "$ApiBase/databases/$user1FirstDb/query" -Method POST -Body $queryData -ContentType "application/json" -Headers $headers2
         Write-Host "🚨 SECURITY BREACH: User 2 can access User 1's database!" -ForegroundColor Red
     } catch {
         Write-Host "✅ Security working: User 2 cannot access User 1's database" -ForegroundColor Green
@@ -132,7 +131,7 @@ Write-Host "`n6. Testing valid database access..."
 # User 1 queries their own database
 if ($user1DbNames.Count -gt 0) {
     try {
-        $validQuery = Invoke-RestMethod -Uri "$ApiBase/databases/$($user1DbNames[0])/query" -Method POST -Body $queryData -ContentType "application/json" -Headers $headers1
+        Invoke-RestMethod -Uri "$ApiBase/databases/$($user1DbNames[0])/query" -Method POST -Body $queryData -ContentType "application/json" -Headers $headers1
         Write-Host "✅ User 1 can query their own database" -ForegroundColor Green
     } catch {
         Write-Host "❌ User 1 cannot query their own database: $($_.Exception.Message)" -ForegroundColor Red

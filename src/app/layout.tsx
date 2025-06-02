@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/providers/theme-provider";
 import QueryProvider from "@/components/providers/query-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { MainNav } from "@/components/main-nav";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -35,6 +36,13 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <QueryProvider>
+            {/* Global Navigation */}
+            <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              <div className="container mx-auto">
+                <MainNav />
+              </div>
+            </header>
+            
             <Toaster />
             {children}
           </QueryProvider>

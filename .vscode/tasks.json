@@ -4,12 +4,9 @@
 		{
 			"label": "Start API Server",
 			"type": "shell",
-			"command": "npx ts-node-dev --respawn --transpile-only --ignore-watch node_modules src/server.ts",
+			"command": "npx ts-node-dev --respawn --transpile-only --ignore-watch node_modules api/src/server.ts",
 			"group": "build",
-			"isBackground": true,
-			"problemMatcher": [
-				"$tsc"
-			]
+			"isBackground": true
 		}
 	]
 }

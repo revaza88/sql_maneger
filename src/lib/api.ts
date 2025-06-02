@@ -43,15 +43,15 @@ export const authApi = {
 
 export const profileApi = {
   getProfile: async () => {
-    const response = await api.get('/profile'); // Removed /api
+    const response = await api.get('/profile');
     return response.data;
   },
   updateProfile: async (updates: { name?: string; email?: string }) => {
-    const response = await api.put('/profile', updates); // Removed /api
+    const response = await api.put('/profile', updates);
     return response.data;
   },
   updatePassword: async (currentPassword: string, newPassword: string) => {
-    const response = await api.put('/profile/password', { currentPassword, newPassword }); // Removed /api
+    const response = await api.put('/profile/password', { currentPassword, newPassword });
     return response.data;
   },
 }

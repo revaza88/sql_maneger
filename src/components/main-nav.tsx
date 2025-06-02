@@ -21,40 +21,45 @@ export function MainNav() {
 
   const handleLogout = () => {
     clearAuth()
+    window.location.href = '/login'
   }
 
   const navigation = [
-    { name: 'Databases', href: '/databases' },
-    { name: 'SQL Server', href: '/sqlserver' },
-    { name: 'Profile', href: '/profile' },
-    ...(user?.role?.toLowerCase() === 'admin' ? [{ name: 'Admin Panel', href: '/admin' }] : []),
+    { name: 'Databases', href: '/databases', icon: Database },
+    { name: 'SQL Server', href: '/sqlserver', icon: Database },
+    { name: 'Profile', href: '/profile', icon: User },
+    ...(user?.role?.toLowerCase() === 'admin' ? [{ name: 'Admin Panel', href: '/admin', icon: Database }] : []),
   ]
 
   return (
-    <nav className="flex items-center space-x-4 lg:space-x-6 mx-6">
-      {/* Logo */}
-      <Link href="/" className="flex items-center space-x-2">
-        <Database className="h-6 w-6" />
-        <span className="font-bold">SQL Manager</span>
-      </Link>
+    <nav className="flex items-center justify-between w-full px-6 py-4 bg-white border-b border-gray-200 shadow-md">
+      {/* Left side - Logo and Navigation */}
+      <div className="flex items-center space-x-8">
+        {/* Logo */}
+        <Link href="/" className="flex items-center space-x-2 text-blue-600 hover:text-blue-800">
+          <Database className="h-6 w-6" />
+          <span className="font-bold text-lg">SQL Manager</span>
+        </Link>
 
-      {/* Navigation Links */}
-      <div className="flex items-center space-x-4 lg:space-x-6">
-        {navigation.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={`text-sm font-medium transition-colors hover:text-primary ${
-              pathname === item.href
-                ? 'text-foreground'
-                : 'text-muted-foreground'
-            }`}
-          >
-            {item.name}
-          </Link>
-        ))}
+        {/* Navigation Links */}
+        <div className="flex items-center space-x-4 lg:space-x-6">
+          {navigation.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`text-sm font-medium transition-colors hover:text-primary ${
+                pathname === item.href
+                  ? 'text-foreground'
+                  : 'text-muted-foreground'
+              }`}
+            >
+              {item.name}
+            </Link>
+          ))}
+        </div>
       </div>
 
+      {/* Right side - Theme toggle and User menu */}
       <div className="ml-auto flex items-center space-x-4">
         {/* Theme Toggle */}
         <Button
@@ -68,7 +73,7 @@ export function MainNav() {
         </Button>
 
         {/* User Menu */}
-        {user && (
+        {user ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -104,6 +109,14 @@ export function MainNav() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        ) : (
+          /* Show login button when user is not authenticated */
+          <Link href="/login">
+            <Button variant="outline" size="sm">
+              <User className="mr-2 h-4 w-4" />
+              Login
+            </Button>
+          </Link>
         )}
       </div>
     </nav>

@@ -14,18 +14,48 @@ const router = Router();
 router.use(authenticate);
 
 // Create SQL Server user for the authenticated user
-router.post('/create-user', (req, res) => createSQLServerUser(req, res));
+router.post('/create-user', async (req, res, next) => {
+  try {
+    await createSQLServerUser(req, res);
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Get SQL Server credentials for the authenticated user
-router.get('/credentials', (req, res) => getSQLServerCredentials(req, res));
+router.get('/credentials', async (req, res, next) => {
+  try {
+    await getSQLServerCredentials(req, res);
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Check if user has SQL Server credentials
-router.get('/check', (req, res) => checkSQLServerUser(req, res));
+router.get('/check', async (req, res, next) => {
+  try {
+    await checkSQLServerUser(req, res);
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Grant access to a specific database
-router.post('/grant-access', (req, res) => grantDatabaseAccess(req, res));
+router.post('/grant-access', async (req, res, next) => {
+  try {
+    await grantDatabaseAccess(req, res);
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Get list of available databases
-router.get('/databases', (req, res) => getAvailableDatabases(req, res));
+router.get('/databases', async (req, res, next) => {
+  try {
+    await getAvailableDatabases(req, res);
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default router;
