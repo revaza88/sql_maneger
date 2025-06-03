@@ -121,10 +121,24 @@ export const checkSQLServerUser = async (req: Request, res: Response) => {
 // Get list of databases available on the server (for access management)
 export const getAvailableDatabases = async (req: Request, res: Response) => {
   try {
-    const databases = await SQLServerUserService.listDatabases();
+    const userId = (req as any).user.id;
+    
+    // Get user's SQL Server credentials to filter databases by username
+    const credentials = await UserModel.getSQLServerCredentials(userId);
+    
+    let databases: string[];
+    
+    if (credentials) {
+      // If user has SQL Server credentials, show only their accessible databases
+      databases = await SQLServerUserService.listDatabases(credentials.username);
+    } else {
+      // If no SQL Server credentials, show limited set of general databases
+      databases = await SQLServerUserService.listDatabases();
+    }
 
     res.json({
-      databases: databases
+      databases: databases,
+      hasCredentials: !!credentials
     });
   } catch (error) {
     console.error('Error getting available databases:', error);

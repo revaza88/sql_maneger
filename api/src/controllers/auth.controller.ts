@@ -2,7 +2,6 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { UserModel } from '../models/user.model';
-import { SQLServerUserService } from '../services/SQLServerUserService';
 import { config } from '../config';
 import { z } from 'zod';
 import { SignOptions } from 'jsonwebtoken';
@@ -35,16 +34,6 @@ export class AuthController {
         password: validatedData.password,
         name: validatedData.name
       });
-
-      // Automatically create SQL Server credentials for the new user
-      try {
-        const sqlCredentials = await SQLServerUserService.createSQLServerUser(user.id, user.email);
-        await UserModel.updateSQLServerCredentials(user.id, sqlCredentials.username, sqlCredentials.password);
-        console.log(`SQL Server credentials created for user ${user.email}: ${sqlCredentials.username}`);
-      } catch (sqlError) {
-        console.error('Failed to create SQL Server credentials during registration:', sqlError);
-        // Don't fail registration if SQL Server creation fails
-      }
 
       // Generate token
       const token = jwt.sign(
@@ -108,6 +97,39 @@ export class AuthController {
       });
     } catch (error) {
       console.error('Login error:', error);
+      next(error);
+    }
+  }
+
+  async verifyPassword(req: Request, res: Response, next: NextFunction): Promise<Response> {
+    try {
+      const { password } = req.body;
+      const userId = (req as any).user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+
+      if (!password) {
+        return res.status(400).json({ message: 'Password is required' });
+      }
+
+      // Get user from database
+      const user = await UserModel.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Verify password
+      const isValidPassword = await bcrypt.compare(password, user.password);
+      
+      if (!isValidPassword) {
+        return res.status(400).json({ message: 'Invalid password' });
+      }
+
+      return res.json({ message: 'Password verified successfully' });
+    } catch (error) {
+      console.error('Password verification error:', error);
       next(error);
     }
   }

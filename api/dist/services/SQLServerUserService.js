@@ -214,19 +214,45 @@ class SQLServerUserService {
         }
     }
     /**
-     * List all available databases on the server
+     * List databases that user can create or has created (with dbcreator role)
+     * For security, only show databases that the user has rights to manage
      */
-    static async listDatabases() {
+    static async listDatabases(username) {
         const masterPool = this.getMasterConnection();
         try {
             await masterPool.connect();
-            const result = await masterPool.request()
-                .query(`
-          SELECT name as database_name
-          FROM sys.databases 
-          WHERE database_id > 4 AND state = 0
-          ORDER BY name
-        `);
+            let query = '';
+            let request = masterPool.request();
+            if (username) {
+                // Show only databases that user has created or can manage
+                // Since user has dbcreator role, they can create new databases
+                // But for existing databases, show only ones they have access to
+                query = `
+          SELECT DISTINCT d.name as database_name
+          FROM sys.databases d
+          LEFT JOIN sys.database_principals dp ON dp.name = @username
+          WHERE d.database_id > 4 AND d.state = 0
+          AND (
+            -- Show databases where user is owner/creator
+            d.owner_sid = (SELECT sid FROM sys.server_principals WHERE name = @username)
+            OR
+            -- Show databases where user has explicit access
+            EXISTS (
+              SELECT 1 FROM sys.database_principals dp2 
+              WHERE dp2.name = @username 
+              AND dp2.type = 'S'
+            )
+          )
+          ORDER BY d.name
+        `;
+                request = request.input('username', mssql_1.default.VarChar, username);
+            }
+            else {
+                // For users without SQL Server credentials, show empty list for security
+                // They need to create SQL Server user first to see any databases
+                return [];
+            }
+            const result = await request.query(query);
             return result.recordset.map(r => r.database_name);
         }
         catch (error) {

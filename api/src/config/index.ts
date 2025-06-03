@@ -24,6 +24,3 @@ export const config = {
       encrypt: false,
       trustServerCertificate: true,
       enableArithAbort: true
-    }
-  }
-};
