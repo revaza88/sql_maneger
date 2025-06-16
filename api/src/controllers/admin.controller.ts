@@ -5,6 +5,7 @@ import { AuditLogModel } from '../models/audit-log.model';
 import { NotificationModel } from '../models/notification.model';
 import { RoleModel } from '../models/role.model';
 import os from 'os';
+import { execSync } from 'child_process';
 
 export class AdminController {
   public getUsers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -196,11 +197,65 @@ export class AdminController {
     }
   };
 
+  public updateRole = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { name, description } = req.body;
+      const success = await RoleModel.update(parseInt(id, 10), name, description);
+      res.json({ status: success ? 'success' : 'error' });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public deleteRole = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const success = await RoleModel.delete(parseInt(id, 10));
+      res.json({ status: success ? 'success' : 'error' });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   public getSystemStats = async (_req: Request, res: Response): Promise<void> => {
+    const cpuUsage = await new Promise<number>((resolve) => {
+      const start = os.cpus();
+      setTimeout(() => {
+        const end = os.cpus();
+        let idleDiff = 0;
+        let totalDiff = 0;
+        for (let i = 0; i < start.length; i++) {
+          const s = start[i].times;
+          const e = end[i].times;
+          const startTotal = Object.values(s).reduce((a, v) => a + v, 0);
+          const endTotal = Object.values(e).reduce((a, v) => a + v, 0);
+          idleDiff += e.idle - s.idle;
+          totalDiff += endTotal - startTotal;
+        }
+        const usage = totalDiff ? (1 - idleDiff / totalDiff) * 100 : 0;
+        resolve(parseFloat(usage.toFixed(2)));
+      }, 100);
+    });
+
+    let freeDisk = null;
+    let totalDisk = null;
+    try {
+      const out = execSync('df -k --output=avail,size / | tail -1').toString().trim().split(/\s+/);
+      if (out.length >= 2) {
+        freeDisk = parseInt(out[0], 10) * 1024;
+        totalDisk = parseInt(out[1], 10) * 1024;
+      }
+    } catch {}
+
     const stats = {
       freeMem: os.freemem(),
       totalMem: os.totalmem(),
-      load: os.loadavg()[0]
+      load: os.loadavg()[0],
+      cpuUsage,
+      freeDisk,
+      totalDisk,
+      activeConnections: process._getActiveHandles().length
     };
     res.json({ status: 'success', data: stats });
   };

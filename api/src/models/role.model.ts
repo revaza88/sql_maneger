@@ -24,4 +24,22 @@ export class RoleModel {
     const result = await pool.request().query('SELECT id, name, description FROM Roles ORDER BY id');
     return result.recordset;
   }
+
+  static async update(id: number, name: string, description?: string): Promise<boolean> {
+    const result = await pool.request()
+      .input('id', sql.Int, id)
+      .input('name', sql.VarChar, name)
+      .input('description', sql.VarChar, description || '')
+      .query(`
+        UPDATE Roles SET name = @name, description = @description WHERE id = @id
+      `);
+    return result.rowsAffected[0] > 0;
+  }
+
+  static async delete(id: number): Promise<boolean> {
+    const result = await pool.request()
+      .input('id', sql.Int, id)
+      .query('DELETE FROM Roles WHERE id = @id');
+    return result.rowsAffected[0] > 0;
+  }
 }

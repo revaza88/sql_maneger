@@ -26,6 +26,8 @@ export default function AdminPage() {
   const [users, setUsers] = useState<ApiUser[]>([]); // Use aliased User type
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const { user, token, clearAuth } = useAuthStore();
   const router = useRouter();  useEffect(() => {
     if (!token || user?.role?.toLowerCase() !== "admin") {
@@ -37,7 +39,7 @@ export default function AdminPage() {
       setIsLoading(true);
       setError(null);
       try {
-        const fetchedUsers = await adminApi.getUsers(token);
+        const fetchedUsers = await adminApi.getUsers(token, { page, search });
         setUsers(fetchedUsers);
       } catch (err) {
         setError("Failed to fetch users.");
@@ -49,7 +51,7 @@ export default function AdminPage() {
     };
 
     fetchUsers();
-  }, [token, user, router]);  const handleRoleChange = async (userId: string, role: "USER" | "ADMIN") => {
+  }, [token, user, router, page, search]);  const handleRoleChange = async (userId: string, role: "USER" | "ADMIN") => {
     if (!token) return;
     try {
       await adminApi.updateUserRole(userId, role, token);
@@ -146,6 +148,15 @@ export default function AdminPage() {
           </Button>
         </div>
       </div>
+      <div className="flex items-center gap-2 mb-4">
+        <input
+          type="text"
+          placeholder="Search users"
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          className="border px-2 py-1 rounded"
+        />
+      </div>
       <Table>
         <TableHeader>
           <TableRow>
@@ -197,6 +208,14 @@ export default function AdminPage() {
           ))}
         </TableBody>
       </Table>
+      <div className="flex justify-between mt-4">
+        <Button variant="outline" disabled={page === 1} onClick={() => setPage(page - 1)}>
+          Prev
+        </Button>
+        <Button variant="outline" onClick={() => setPage(page + 1)}>
+          Next
+        </Button>
+      </div>
     </div>
   );
 }

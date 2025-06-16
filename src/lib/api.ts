@@ -248,4 +248,10 @@ export const adminApi = {
     const response = await api.post('/admin/roles', data, { headers: { Authorization: `Bearer ${token}` } });
     return response.data.data;
   },
+  updateRole: async (id: number, data: { name: string; description?: string }, token: string) => {
+    await api.put(`/admin/roles/${id}`, data, { headers: { Authorization: `Bearer ${token}` } });
+  },
+  deleteRole: async (id: number, token: string) => {
+    await api.delete(`/admin/roles/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+  },
 };

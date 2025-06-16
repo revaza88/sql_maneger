@@ -32,6 +32,8 @@ adminRouter.delete('/notifications/:id', adminController.deleteNotification);
 
 adminRouter.get('/roles', adminController.listRoles);
 adminRouter.post('/roles', adminController.createRole);
+adminRouter.put('/roles/:id', adminController.updateRole);
+adminRouter.delete('/roles/:id', adminController.deleteRole);
 
 adminRouter.get('/system-stats', adminController.getSystemStats);
 
