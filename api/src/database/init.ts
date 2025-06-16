@@ -12,6 +12,7 @@ export async function initializeDatabase() {
           [password] NVARCHAR(255) NOT NULL,
           [name] NVARCHAR(255) NOT NULL,
           [role] NVARCHAR(50) NOT NULL DEFAULT 'user',
+          [isBlocked] BIT NOT NULL DEFAULT 0,
           [createdAt] DATETIME NOT NULL DEFAULT GETDATE(),
           [updatedAt] DATETIME NOT NULL DEFAULT GETDATE()
         );
@@ -19,8 +20,8 @@ export async function initializeDatabase() {
         -- Create default admin user if needed
         IF NOT EXISTS (SELECT * FROM [dbo].[Users] WHERE [email] = 'admin@example.com')
         BEGIN
-          INSERT INTO [dbo].[Users] ([email], [password], [name], [role])
-          VALUES ('admin@example.com', '$2b$10$XkpOQj7XqU9s9ZQ5q5Z5Y.9Z5q5Y.9Z5q5Y.9Z5q5Y.', 'Admin', 'admin')
+          INSERT INTO [dbo].[Users] ([email], [password], [name], [role], [isBlocked])
+          VALUES ('admin@example.com', '$2b$10$XkpOQj7XqU9s9ZQ5q5Z5Y.9Z5q5Y.9Z5q5Y.9Z5q5Y.', 'Admin', 'admin', 0)
         END
       END
     `);

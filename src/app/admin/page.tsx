@@ -79,6 +79,34 @@ export default function AdminPage() {
     }
   };
 
+  const handleBlockToggle = async (userId: string, blocked: boolean) => {
+    if (!token) return;
+    try {
+      if (blocked) {
+        await adminApi.unblockUser(userId, token);
+      } else {
+        await adminApi.blockUser(userId, token);
+      }
+      setUsers(users.map((u) => (u.id === userId ? { ...u, isBlocked: !blocked } : u)));
+      toast.success(blocked ? "User unblocked" : "User blocked");
+    } catch (err) {
+      toast.error("Action failed");
+      console.error(err);
+    }
+  };
+
+  const handleResetPassword = async (userId: string) => {
+    if (!token) return;
+    const newPassword = prompt('Enter new password');
+    if (!newPassword) return;
+    try {
+      await adminApi.resetPassword(userId, newPassword, token);
+      toast.success('Password reset');
+    } catch (err) {
+      toast.error('Failed to reset password');
+    }
+  };
+
   if (isLoading) {
     return <LoadingSpinner />;
   }
@@ -120,6 +148,7 @@ export default function AdminPage() {
             <TableHead>ID</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Role</TableHead>
+            <TableHead>Status</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -131,6 +160,7 @@ export default function AdminPage() {
               </TableCell>
               <TableCell>{u.email}</TableCell>
               <TableCell>{u.role}</TableCell>
+              <TableCell>{u.isBlocked ? 'Blocked' : 'Active'}</TableCell>
               <TableCell>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -147,10 +177,13 @@ export default function AdminPage() {
                     >
                       Change to {u.role === "ADMIN" ? "USER" : "ADMIN"}
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleDeleteUser(u.id)}
-                      className="text-red-600"
-                    >
+                    <DropdownMenuItem onClick={() => handleBlockToggle(u.id, !!u.isBlocked)}>
+                      {u.isBlocked ? 'Unblock User' : 'Block User'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleResetPassword(u.id)}>
+                      Reset Password
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleDeleteUser(u.id)} className="text-red-600">
                       Delete User
                     </DropdownMenuItem>
                   </DropdownMenuContent>

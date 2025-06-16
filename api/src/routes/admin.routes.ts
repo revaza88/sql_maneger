@@ -16,4 +16,8 @@ adminRouter.get('/users', adminController.getUsers.bind(adminController));
 // Add other admin-specific routes here
 adminRouter.put('/users/:userId/role', adminController.updateUserRole);
 adminRouter.delete('/users/:userId', adminController.deleteUser);
+adminRouter.put('/users/:userId/block', adminController.blockUser);
+adminRouter.put('/users/:userId/unblock', adminController.unblockUser);
+adminRouter.put('/users/:userId/password', adminController.resetPassword);
+adminRouter.get('/stats', adminController.getStats);
 
