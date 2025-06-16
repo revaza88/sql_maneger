@@ -11,7 +11,7 @@
 ### 1. Clone Repository
 ```bash
 cd /home/[username]/htdocs/[domain.com]
-git clone https://github.com/revaza88/sql_maneger.git .
+git clone https://github.com/revaza88/sql_manager.git .
 git checkout feature-v2
 ```
 
