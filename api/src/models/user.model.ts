@@ -12,9 +12,10 @@ export class UserModel {
       .input('password', sql.VarChar, hashedPassword)
       .input('name', sql.VarChar, user.name)
       .input('role', sql.VarChar, user.role || 'user')
+      .input('isBlocked', sql.Bit, user.isBlocked ? 1 : 0)
       .query(`
-        INSERT INTO Users (email, password, name, role, createdAt, updatedAt)
-        VALUES (@email, @password, @name, @role, GETDATE(), GETDATE());
+        INSERT INTO Users (email, password, name, role, isBlocked, createdAt, updatedAt)
+        VALUES (@email, @password, @name, @role, @isBlocked, GETDATE(), GETDATE());
         SELECT SCOPE_IDENTITY() as id;
       `);
     
@@ -25,6 +26,7 @@ export class UserModel {
       password: hashedPassword,
       name: user.name,
       role: user.role || 'user',
+      isBlocked: user.isBlocked || false,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -99,9 +101,31 @@ export class UserModel {
   }
 
   // Added findAll method to fetch all users (excluding password)
-  static async findAll(): Promise<Omit<User, 'password'>[]> {
-    const result = await pool.request().query('SELECT id, email, name, role, sqlServerUsername, createdAt, updatedAt FROM Users');
+  static async findAll(limit?: number, offset?: number, search?: string): Promise<Omit<User, 'password'>[]> {
+    let query = 'SELECT id, email, name, role, sqlServerUsername, isBlocked, createdAt, updatedAt FROM Users';
+    const request = pool.request();
+    if (search) {
+      query += ' WHERE email LIKE @search OR name LIKE @search';
+      request.input('search', sql.VarChar, `%${search}%`);
+    }
+    query += ' ORDER BY id';
+    if (limit !== undefined && offset !== undefined) {
+      query += ' OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY';
+      request.input('offset', sql.Int, offset).input('limit', sql.Int, limit);
+    }
+    const result = await request.query(query);
     return result.recordset;
+  }
+
+  static async countAll(search?: string): Promise<number> {
+    let query = 'SELECT COUNT(*) as total FROM Users';
+    const request = pool.request();
+    if (search) {
+      query += ' WHERE email LIKE @search OR name LIKE @search';
+      request.input('search', sql.VarChar, `%${search}%`);
+    }
+    const result = await request.query(query);
+    return result.recordset[0].total;
   }
 
   // Added updateRole method (example)
@@ -120,6 +144,21 @@ export class UserModel {
       .input('id', sql.Int, id)
       .query('DELETE FROM Users WHERE id = @id');
     return result.rowsAffected[0] > 0;
+  }
+
+  static async setBlocked(id: number, blocked: boolean): Promise<boolean> {
+    const result = await pool.request()
+      .input('id', sql.Int, id)
+      .input('isBlocked', sql.Bit, blocked ? 1 : 0)
+      .input('updatedAt', sql.DateTime, new Date())
+      .query('UPDATE Users SET isBlocked = @isBlocked, updatedAt = @updatedAt WHERE id = @id');
+    return result.rowsAffected[0] > 0;
+  }
+
+  static async countBlocked(): Promise<number> {
+    const result = await pool.request()
+      .query('SELECT COUNT(*) as total FROM Users WHERE isBlocked = 1');
+    return result.recordset[0].total;
   }
 
   // SQL Server credentials management methods

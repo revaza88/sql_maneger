@@ -6,6 +6,7 @@ export interface User {
   role: 'admin' | 'user';
   sqlServerUsername?: string;
   sqlServerPassword?: string;
+  isBlocked?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -17,6 +18,7 @@ export interface UserCreate {
   role?: 'admin' | 'user';
   sqlServerUsername?: string;
   sqlServerPassword?: string;
+  isBlocked?: boolean;
 }
 
 export interface UserProfileUpdate {

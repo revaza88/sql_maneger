@@ -176,15 +176,17 @@ export interface User {
   email: string;
   name?: string;
   role: "USER" | "ADMIN";
+  isBlocked?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
 
 // Admin API
 export const adminApi = {
-  getUsers: async (token: string): Promise<User[]> => {
-    const response = await api.get('/admin/users', { // Removed /api
+  getUsers: async (token: string, params?: { page?: number; limit?: number; search?: string }): Promise<User[]> => {
+    const response = await api.get('/admin/users', {
       headers: { Authorization: `Bearer ${token}` },
+      params,
     });
     return response.data.data;
   },
@@ -198,5 +200,18 @@ export const adminApi = {
     await api.delete(`/admin/users/${userId}`, { // Removed /api
       headers: { Authorization: `Bearer ${token}` },
     });
+  },
+  blockUser: async (userId: string, token: string): Promise<void> => {
+    await api.put(`/admin/users/${userId}/block`, {}, { headers: { Authorization: `Bearer ${token}` } });
+  },
+  unblockUser: async (userId: string, token: string): Promise<void> => {
+    await api.put(`/admin/users/${userId}/unblock`, {}, { headers: { Authorization: `Bearer ${token}` } });
+  },
+  resetPassword: async (userId: string, newPassword: string, token: string): Promise<void> => {
+    await api.put(`/admin/users/${userId}/password`, { newPassword }, { headers: { Authorization: `Bearer ${token}` } });
+  },
+  getStats: async (token: string): Promise<{ totalUsers: number; blockedUsers: number }> => {
+    const response = await api.get('/admin/stats', { headers: { Authorization: `Bearer ${token}` } });
+    return response.data.data;
   },
 };
