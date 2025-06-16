@@ -165,14 +165,14 @@ sqlmanager-v2/
 ### Authentication
 - `POST /api/auth/register` - User registration
 - `POST /api/auth/login` - User login
-- `GET /api/auth/verify` - Token verification
+- `POST /api/auth/verify-password` - Verify password
 
 ### Database Management
-- `GET /api/databases` - List user databases
+- `GET /api/databases/list` - List user databases
 - `POST /api/databases` - Create new database
-- `DELETE /api/databases/:name` - Delete database
-- `POST /api/databases/:name/backup` - Backup database
-- `POST /api/databases/:name/restore` - Restore database
+- `DELETE /api/databases/:databaseName` - Delete database
+- `POST /api/databases/:databaseName/backup` - Backup database
+- `POST /api/databases/:databaseName/restore` - Restore database
 
 ### Profile Management
 - `GET /api/profile` - Get user profile
@@ -180,8 +180,8 @@ sqlmanager-v2/
 - `PUT /api/profile/password` - Change password
 
 ### SQL Server Operations
-- `POST /api/sqlserver/:dbName/query` - Execute SQL query
-- `GET /api/sqlserver/:dbName/tables` - List database tables
+- `POST /api/databases/:database/query` - Execute SQL query
+- `GET /api/databases/:database/tables` - List database tables
 
 ## Contributing
 
