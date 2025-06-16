@@ -183,6 +183,22 @@ sqlmanager-v2/
 - `POST /api/databases/:database/query` - Execute SQL query
 - `GET /api/databases/:database/tables` - List database tables
 
+## Deployment
+
+For full deployment steps, see the [deployment guide](deployment-guide.md) and the
+[CloudPanel configuration](cloudpanel-config.md). A helper script
+`deploy.sh` is provided to automate installation and PM2 setup on servers.
+
+## Testing
+
+Several scripts are available to verify security and database features:
+
+- `node test-database-security.js` – checks isolation between SQL Server users
+  and verifies credential creation.
+- `node api/test-db-creation.js` – tests database creation via the API.
+- `node api/test-user-isolation.js` – ensures user-specific access controls
+  are enforced.
+
 ## Contributing
 
 1. Fork the repository
