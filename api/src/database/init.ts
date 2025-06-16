@@ -34,6 +34,7 @@ export async function initializeDatabase() {
           [id] INT IDENTITY(1,1) PRIMARY KEY,
           [userId] INT NOT NULL,
           [databaseName] NVARCHAR(255) NOT NULL,
+          [quotaMB] INT NOT NULL DEFAULT 100,
           [createdAt] DATETIME2 DEFAULT GETDATE(),
           [updatedAt] DATETIME2 DEFAULT GETDATE(),
           FOREIGN KEY (userId) REFERENCES Users(id) ON DELETE CASCADE,

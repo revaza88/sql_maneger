@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 export default function AdminDashboard() {
   const { token, user } = useAuthStore();
   const [stats, setStats] = useState<{ totalUsers: number; blockedUsers: number } | null>(null);
-  const [systemStats, setSystemStats] = useState<{ freeMem: number; totalMem: number; load: number } | null>(null);
+  const [systemStats, setSystemStats] = useState<{ freeMem: number; totalMem: number; load: number; cpuUsage: number; freeDisk: number | null; totalDisk: number | null; activeConnections: number } | null>(null);
 
   useEffect(() => {
     if (!token || user?.role?.toLowerCase() !== 'admin') return;
@@ -31,6 +31,11 @@ export default function AdminDashboard() {
           <p>Free Memory: {Math.round(systemStats.freeMem / (1024 * 1024))} MB</p>
           <p>Total Memory: {Math.round(systemStats.totalMem / (1024 * 1024))} MB</p>
           <p>Load Average: {systemStats.load}</p>
+          <p>CPU Usage: {systemStats.cpuUsage}%</p>
+          {systemStats.freeDisk !== null && systemStats.totalDisk !== null && (
+            <p>Disk: {Math.round(systemStats.freeDisk / (1024 * 1024))} MB free of {Math.round(systemStats.totalDisk / (1024 * 1024))} MB</p>
+          )}
+          <p>Active Connections: {systemStats.activeConnections}</p>
         </div>
       )}
       <Button onClick={() => history.back()}>Back</Button>

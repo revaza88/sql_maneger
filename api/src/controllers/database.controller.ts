@@ -110,7 +110,7 @@ export class DatabaseController {
 
   public createDatabase = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { name, collation } = req.body;
+      const { name, collation, quotaMB } = req.body;
       
       // Verify authentication
       if (!req.user) {
@@ -127,7 +127,7 @@ export class DatabaseController {
       }
 
       // Use UserDatabaseService to create database with user's credentials
-      await UserDatabaseService.createDatabase(req.user.id, name, collation);
+      await UserDatabaseService.createDatabase(req.user.id, name, collation, quotaMB);
       res.json({ status: 'success', message: `Database ${name} created successfully` });
     } catch (error) {
       let message = 'Failed to create database';
@@ -595,6 +595,28 @@ export class DatabaseController {
         errorType,
         timestamp: new Date().toISOString()
       });
+    }
+  };
+
+  public updateDatabaseQuota = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { databaseName } = req.params;
+      const { quotaMB } = req.body;
+
+      if (!req.user) {
+        res.status(401).json({ status: 'error', message: 'Authentication required' });
+        return;
+      }
+
+      if (!quotaMB || quotaMB <= 0) {
+        res.status(400).json({ status: 'error', message: 'quotaMB must be a positive number' });
+        return;
+      }
+
+      await UserDatabaseService.updateQuota(req.user.id, databaseName, quotaMB);
+      res.json({ status: 'success' });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message });
     }
   };
   

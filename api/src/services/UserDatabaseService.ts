@@ -65,7 +65,7 @@ export class UserDatabaseService {
       await adminPool.connect();
 
       try {
-        const databaseList = ownedDatabases.map(db => `'${db}'`).join(',');
+        const databaseList = ownedDatabases.map(db => `'${db.databaseName}'`).join(',');
         
         const result = await adminPool.request()
           .query(`
@@ -80,12 +80,16 @@ export class UserDatabaseService {
             ORDER BY d.name
           `);
 
-        return result.recordset.map(db => ({
-          name: String(db.name),
-          size_mb: parseFloat(db.size_mb.toFixed(2)),
-          create_date: new Date(db.create_date).toISOString(),
-          state_desc: String(db.state_desc)
-        }));
+        return result.recordset.map(db => {
+          const owned = ownedDatabases.find(o => o.databaseName === db.name);
+          return {
+            name: String(db.name),
+            size_mb: parseFloat(db.size_mb.toFixed(2)),
+            create_date: new Date(db.create_date).toISOString(),
+            state_desc: String(db.state_desc),
+            quotaMB: owned?.quotaMB ?? null
+          };
+        });
       } finally {
         await adminPool.close();
       }
@@ -98,7 +102,7 @@ export class UserDatabaseService {
   /**
    * Create a new database using user's credentials
    */
-  static async createDatabase(userId: number, databaseName: string, collation?: string): Promise<void> {
+  static async createDatabase(userId: number, databaseName: string, collation?: string, quotaMB: number = 100): Promise<void> {
     const userPool = await this.getUserConnectionPool(userId);
     
     try {
@@ -141,7 +145,7 @@ export class UserDatabaseService {
       }
 
       // Record the ownership in our system
-      await UserDatabaseModel.createUserDatabase(userId, sanitizedName);
+      await UserDatabaseModel.createUserDatabase(userId, sanitizedName, quotaMB);
 
       console.log(`Database ${sanitizedName} created successfully for user ${userId}`);
     } catch (error) {
@@ -364,6 +368,18 @@ export class UserDatabaseService {
   }
 
   /**
+   * Update quota for a user's database
+   */
+  static async updateQuota(userId: number, databaseName: string, quotaMB: number): Promise<void> {
+    // Check ownership
+    const owns = await UserDatabaseModel.userOwnsDatabase(userId, databaseName);
+    if (!owns) {
+      throw new Error('You do not have permission to update quota for this database');
+    }
+    await UserDatabaseModel.updateQuota(userId, databaseName, quotaMB);
+  }
+
+  /**
    * Get backup history for a user's database
    */
   static async getBackupHistory(userId: number, databaseName?: string): Promise<any[]> {
@@ -403,7 +419,7 @@ export class UserDatabaseService {
         const sanitizedName = databaseName.replace(/[^\w_]/g, '');
         dbFilter = `WHERE b.database_name = '${sanitizedName}'`;
       } else {
-        const databaseList = ownedDatabases.map(db => `'${db}'`).join(',');
+        const databaseList = ownedDatabases.map(db => `'${db.databaseName}'`).join(',');
         dbFilter = `WHERE b.database_name IN (${databaseList})`;
       }
 

@@ -28,3 +28,4 @@ databaseRouter.get('/:databaseName/download-backup', dbController.downloadBackup
 databaseRouter.post('/upload-backup', uploadBackupFile.single('backupFile'), dbController.uploadBackup); // Upload backup file
 databaseRouter.post('/:databaseName/restore-from-upload', dbController.restoreFromUpload); // Restore from uploaded file
 databaseRouter.get('/uploaded-backups', dbController.getUploadedBackups); // Get list of uploaded backup files
+databaseRouter.put('/:databaseName/quota', dbController.updateDatabaseQuota);
