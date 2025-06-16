@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import { config } from './config/index';
+import logger from "./utils/logger";
 import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth';
 import { databaseRouter } from './routes/database.routes';
@@ -64,10 +65,10 @@ app.use(errorHandler);
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+  logger.info('Client connected:', socket.id);
 
   socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+    logger.info('Client disconnected:', socket.id);
   });
 });
 
@@ -76,30 +77,30 @@ const PORT = config.port || 3001;
 // Initialize database and start server
 async function startServer() {
   try {
-    console.log('Initializing database connection...');
+    logger.info('Initializing database connection...');
     const dbService = DatabaseService.getInstance();
     await dbService.testConnection();
-    console.log('Database connection verified successfully');
+    logger.info('Database connection verified successfully');
 
     // Initialize database tables
-    console.log('Initializing database tables...');
+    logger.info('Initializing database tables...');
     await initializeDatabase();
-    console.log('Database tables initialized successfully');
+    logger.info('Database tables initialized successfully');
 
     // Start HTTP server
     const port = config.port;
     httpServer.listen(port, () => {
-      console.log(`Server is running on port ${port}`);
-      console.log('CORS origins:', config.corsOrigin);
+      logger.info(`Server is running on port ${port}`);
+      logger.info('CORS origins:', config.corsOrigin);
     });
 
     // Handle server errors
     httpServer.on('error', (error) => {
-      console.error('Server error:', error);
+      logger.error('Server error:', error);
     });
 
   } catch (error) {
-    console.error('Failed to start server:', error);
+    logger.error('Failed to start server:', error);
     process.exit(1);
   }
 }
