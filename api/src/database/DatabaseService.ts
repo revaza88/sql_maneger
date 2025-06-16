@@ -3,6 +3,8 @@ import { config } from '../config';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import logger from "../utils/logger";
+import { sanitizeDbName } from "./utils";
 export class DatabaseService {
   private static instance: DatabaseService;
   private pool: sql.ConnectionPool | null = null;
@@ -31,7 +33,7 @@ export class DatabaseService {
 
     // Handle pool errors
     this.pool.on('error', err => {
-      console.error('Database pool error:', err);
+      logger.error('Database pool error:', err);
     });
   }
 
@@ -45,7 +47,7 @@ export class DatabaseService {
   private async ensureConnection() {
     try {
       if (!this.pool) {
-        console.log('Creating new connection pool...');
+        logger.info('Creating new connection pool...');
         this.pool = new sql.ConnectionPool({
           user: config.database.user,
           password: config.database.password,
@@ -76,17 +78,17 @@ export class DatabaseService {
               setTimeout(() => reject(new Error('Connection timeout')), 5000)
             )
           ]);
-          console.log('Successfully connected to database');
+          logger.info('Successfully connected to database');
           return;
         } catch (error) {
           retries--;
           if (retries === 0) throw error;
-          console.log(`Connection failed, retrying... (${retries} attempts left)`);
+          logger.info(`Connection failed, retrying... (${retries} attempts left)`);
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
     } catch (error) {
-      console.error('Failed to ensure database connection:', error);
+      logger.error('Failed to ensure database connection:', error);
       throw error;
     }
   }
@@ -103,12 +105,12 @@ export class DatabaseService {
         });
       }
       
-      console.log('Executing query:', query);
+      logger.info('Executing query:', query);
       const result = await request.query(query);
-      console.log('Query executed successfully');
+      logger.info('Query executed successfully');
       return result.recordset;
     } catch (error) {
-      console.error('Error executing query:', error);
+      logger.error('Error executing query:', error);
       throw error;
     }
   }
@@ -119,14 +121,14 @@ export class DatabaseService {
       await this.query('SELECT 1');
       return true;
     } catch (error) {
-      console.error('Database connection test failed:', error);
+      logger.error('Database connection test failed:', error);
       return false;
     }
   }
 
   public async getDatabases(): Promise<any[]> {
     try {
-      console.log('Fetching databases list...');
+      logger.info('Fetching databases list...');
       const query = `
         SELECT 
           d.name,
@@ -139,13 +141,13 @@ export class DatabaseService {
       `;
       
       await this.ensureConnection();
-      console.log('Connection ensured, executing query...');
+      logger.info('Connection ensured, executing query...');
       
       const result = await this.query(query);
-      console.log('Query executed, processing results...');
+      logger.info('Query executed, processing results...');
       
       if (!Array.isArray(result)) {
-        console.error('Invalid result format:', result);
+        logger.error('Invalid result format:', result);
         return [];
       }
       
@@ -157,10 +159,10 @@ export class DatabaseService {
         state_desc: String(db.state_desc)
       }));
       
-      console.log(`Successfully retrieved ${databases.length} databases`);
+      logger.info(`Successfully retrieved ${databases.length} databases`);
       return databases;
     } catch (error) {
-      console.error('Error in getDatabases:', error);
+      logger.error('Error in getDatabases:', error);
       throw error;
     }
   }
@@ -184,12 +186,9 @@ export class DatabaseService {
   }
 
   // Helper function to sanitize database names
-  private sanitizeDbName(dbName: string): string {
-    return dbName.replace(/[^\w_]/g, '');
-  }
-
+  
   public async createDatabase(dbName: string, collation?: string): Promise<void> {
-    const sanitizedDbName = this.sanitizeDbName(dbName);
+    const sanitizedDbName = sanitizeDbName(dbName);
     if (!sanitizedDbName) {
       throw new Error('Invalid database name.');
     }
@@ -217,7 +216,7 @@ export class DatabaseService {
   }
 
   public async deleteDatabase(dbName: string): Promise<void> {
-    const sanitizedDbName = this.sanitizeDbName(dbName);
+    const sanitizedDbName = sanitizeDbName(dbName);
     if (!sanitizedDbName) {
       throw new Error('Invalid database name.');
     }
@@ -233,7 +232,7 @@ export class DatabaseService {
 
   public async backupDatabase(dbName: string, backupPath: string): Promise<void> {
     try {
-      const sanitizedDbName = this.sanitizeDbName(dbName);
+      const sanitizedDbName = sanitizeDbName(dbName);
       if (!sanitizedDbName) {
         throw new Error('Invalid database name.');
       }
@@ -263,11 +262,11 @@ export class DatabaseService {
         SKIP, NOREWIND, NOUNLOAD, STATS = 10
       `;
       
-      console.log(`Attempting to backup database '${sanitizedDbName}' to '${finalBackupPath}'`);
+      logger.info(`Attempting to backup database '${sanitizedDbName}' to '${finalBackupPath}'`);
       await this.query(query);
-      console.log(`Successfully backed up database '${sanitizedDbName}' to '${finalBackupPath}'`);
+      logger.info(`Successfully backed up database '${sanitizedDbName}' to '${finalBackupPath}'`);
     } catch (error) {
-      console.error(`Error backing up database '${dbName}':`, error);
+      logger.error(`Error backing up database '${dbName}':`, error);
       throw error;
     }
   }
@@ -285,7 +284,7 @@ export class DatabaseService {
 
   public async restoreDatabase(dbName: string, backupPath: string): Promise<void> {
     try {
-      const sanitizedDbName = this.sanitizeDbName(dbName);
+      const sanitizedDbName = sanitizeDbName(dbName);
       if (!sanitizedDbName) {
         throw new Error('Invalid database name.');
       }
@@ -305,8 +304,8 @@ export class DatabaseService {
       // Check if backup file exists (can't easily do this from SQL Server, would need file system access)
       // Would require additional server-side code with fs.existsSync
       
-      console.log(`Attempting to restore database '${sanitizedDbName}' from '${sanitizedBackupPath}'`);
-      console.log('Setting database to SINGLE_USER mode');
+      logger.info(`Attempting to restore database '${sanitizedDbName}' from '${sanitizedBackupPath}'`);
+      logger.info('Setting database to SINGLE_USER mode');
       
       // Set database to single user mode for restore
       const setSingleUserQuery = `
@@ -329,30 +328,30 @@ export class DatabaseService {
       try {
         // Execute the queries in sequence
         await this.query(setSingleUserQuery);
-        console.log('Database set to SINGLE_USER mode, beginning restore');
+        logger.info('Database set to SINGLE_USER mode, beginning restore');
         
         await this.query(restoreQuery);
-        console.log('Restore completed successfully');
+        logger.info('Restore completed successfully');
         
         await this.query(setMultiUserQuery);
-        console.log('Database set back to MULTI_USER mode');
+        logger.info('Database set back to MULTI_USER mode');
         
-        console.log(`Successfully restored database '${sanitizedDbName}' from '${sanitizedBackupPath}'`);
+        logger.info(`Successfully restored database '${sanitizedDbName}' from '${sanitizedBackupPath}'`);
       } catch (error) {
-        console.error(`Error during restore operation:`, error);
+        logger.error(`Error during restore operation:`, error);
         
         // If error occurs, try to set database back to multi-user
         try {
-          console.log('Attempting to set database back to MULTI_USER mode after error');
+          logger.info('Attempting to set database back to MULTI_USER mode after error');
           await this.query(setMultiUserQuery);
         } catch (cleanupError) {
-          console.error('Failed to reset database to MULTI_USER mode:', cleanupError);
+          logger.error('Failed to reset database to MULTI_USER mode:', cleanupError);
           // Ignore additional errors in cleanup
         }
         throw error;
       }
     } catch (error) {
-      console.error(`Error restoring database '${dbName}':`, error);
+      logger.error(`Error restoring database '${dbName}':`, error);
       throw error;
     }
   }
@@ -376,7 +375,7 @@ export class DatabaseService {
    */
   public async getBackupHistory(dbName?: string): Promise<any[]> {
     try {
-      const sanitizedDbName = dbName ? this.sanitizeDbName(dbName) : null;
+      const sanitizedDbName = dbName ? sanitizeDbName(dbName) : null;
       
       let dbFilter = '';
       if (sanitizedDbName) {
@@ -407,7 +406,7 @@ export class DatabaseService {
           b.database_name
       `;
       
-      console.log(`Retrieving backup history ${sanitizedDbName ? 'for ' + sanitizedDbName : 'for all databases'}`);
+      logger.info(`Retrieving backup history ${sanitizedDbName ? 'for ' + sanitizedDbName : 'for all databases'}`);
       const result = await this.query(query);
       
       return result.map(record => ({
@@ -419,7 +418,7 @@ export class DatabaseService {
         backupType: record.BackupType
       }));
     } catch (error) {
-      console.error('Error retrieving backup history:', error);
+      logger.error('Error retrieving backup history:', error);
       throw error;
     }
   }
@@ -429,27 +428,27 @@ export class DatabaseService {
    */
   public async createBackupForDownload(databaseName: string): Promise<string> {
     try {
-      console.log(`Starting backup for download: ${databaseName}`);
+      logger.info(`Starting backup for download: ${databaseName}`);
       await this.ensureConnection();
-      console.log('Database connection established for backup');
+      logger.info('Database connection established for backup');
       
       // Create a temporary backup directory if it doesn't exist
       const backupDir = path.join(process.cwd(), 'temp_backups');
-      console.log(`Backup directory: ${backupDir}`);
+      logger.info(`Backup directory: ${backupDir}`);
       
       if (!fs.existsSync(backupDir)) {
-        console.log('Creating backup directory...');
+        logger.info('Creating backup directory...');
         fs.mkdirSync(backupDir, { recursive: true });
       }
       
       // Generate unique filename with timestamp
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const backupPath = path.join(backupDir, `${databaseName}_${timestamp}.bak`);
-      console.log(`Generated backup path: ${backupPath}`);
+      logger.info(`Generated backup path: ${backupPath}`);
       
       // SQL Server requires Windows-style paths
       const sqlServerPath = backupPath.replace(/\//g, '\\');
-      console.log(`SQL Server path: ${sqlServerPath}`);
+      logger.info(`SQL Server path: ${sqlServerPath}`);
       
       const query = `
         BACKUP DATABASE [${databaseName}] 
@@ -460,13 +459,13 @@ export class DatabaseService {
           NAME = '${databaseName} Full Backup - ${new Date().toISOString()}'
       `;
       
-      console.log(`Executing backup query: ${query}`);
+      logger.info(`Executing backup query: ${query}`);
       await this.query(query);
-      console.log(`Backup completed successfully: ${backupPath}`);
+      logger.info(`Backup completed successfully: ${backupPath}`);
       
       return backupPath;
     } catch (error) {
-      console.error('Error creating backup for download:', error);
+      logger.error('Error creating backup for download:', error);
       throw error;
     }
   }
@@ -497,7 +496,7 @@ export class DatabaseService {
         FROM DISK = '${sqlServerPath}'
       `;
       
-      console.log('Reading backup file header and file list...');
+      logger.info('Reading backup file header and file list...');
       const fileListResult = await this.query(fileListQuery);
       
       if (!fileListResult || fileListResult.length === 0) {
@@ -537,12 +536,12 @@ export class DatabaseService {
           RECOVERY
       `;
       
-      console.log(`Restoring database from uploaded file: ${databaseName} <- ${sqlServerPath}`);
+      logger.info(`Restoring database from uploaded file: ${databaseName} <- ${sqlServerPath}`);
       await this.query(restoreQuery);
       
-      console.log(`Database ${databaseName} restored successfully from uploaded file`);
+      logger.info(`Database ${databaseName} restored successfully from uploaded file`);
     } catch (error) {
-      console.error('Error restoring from uploaded file:', error);
+      logger.error('Error restoring from uploaded file:', error);
       throw error;
     }
   }
@@ -554,10 +553,10 @@ export class DatabaseService {
     try {
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
-        console.log(`Cleaned up temporary backup file: ${filePath}`);
+        logger.info(`Cleaned up temporary backup file: ${filePath}`);
       }
     } catch (error) {
-      console.error('Error cleaning up temporary backup file:', error);
+      logger.error('Error cleaning up temporary backup file:', error);
       // Don't throw - this is cleanup, not critical
     }
   }
@@ -587,7 +586,7 @@ export class DatabaseService {
         };
       });
     } catch (error) {
-      console.error('Error getting uploaded backups:', error);
+      logger.error('Error getting uploaded backups:', error);
       return [];
     }
   }
