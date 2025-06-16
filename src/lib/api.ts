@@ -214,4 +214,38 @@ export const adminApi = {
     const response = await api.get('/admin/stats', { headers: { Authorization: `Bearer ${token}` } });
     return response.data.data;
   },
+  getLoginHistory: async (token: string) => {
+    const response = await api.get('/admin/login-history', { headers: { Authorization: `Bearer ${token}` } });
+    return response.data.data;
+  },
+  getAuditLogs: async (token: string) => {
+    const response = await api.get('/admin/audit-logs', { headers: { Authorization: `Bearer ${token}` } });
+    return response.data.data;
+  },
+  listNotifications: async (token: string) => {
+    const response = await api.get('/admin/notifications', { headers: { Authorization: `Bearer ${token}` } });
+    return response.data.data;
+  },
+  createNotification: async (data: { message: string; type?: string; isActive?: boolean }, token: string) => {
+    const response = await api.post('/admin/notifications', data, { headers: { Authorization: `Bearer ${token}` } });
+    return response.data.data;
+  },
+  updateNotification: async (id: number, data: { message: string; type?: string; isActive?: boolean }, token: string) => {
+    await api.put(`/admin/notifications/${id}`, data, { headers: { Authorization: `Bearer ${token}` } });
+  },
+  deleteNotification: async (id: number, token: string) => {
+    await api.delete(`/admin/notifications/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+  },
+  getSystemStats: async (token: string) => {
+    const response = await api.get('/admin/system-stats', { headers: { Authorization: `Bearer ${token}` } });
+    return response.data.data;
+  },
+  listRoles: async (token: string) => {
+    const response = await api.get('/admin/roles', { headers: { Authorization: `Bearer ${token}` } });
+    return response.data.data;
+  },
+  createRole: async (data: { name: string; description?: string }, token: string) => {
+    const response = await api.post('/admin/roles', data, { headers: { Authorization: `Bearer ${token}` } });
+    return response.data.data;
+  },
 };

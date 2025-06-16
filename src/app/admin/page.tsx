@@ -131,8 +131,12 @@ export default function AdminPage() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => router.push('/databases')}>
             Back to Dashboard
-          </Button>          <Button 
-            variant="destructive" 
+          </Button>
+          <Button variant="outline" onClick={() => router.push('/admin/dashboard')}>
+            View Stats
+          </Button>
+          <Button
+            variant="destructive"
             onClick={() => {
               clearAuth();
               router.push('/admin/login');

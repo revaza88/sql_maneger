@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { UserModel } from '../models/user.model';
+import { LoginHistoryModel } from '../models/login-history.model';
+import { AuditLogModel } from '../models/audit-log.model';
 import { config } from '../config';
 import { z } from 'zod';
 import { SignOptions } from 'jsonwebtoken';
@@ -84,6 +86,9 @@ export class AuthController {
         config.jwt.secret as string,
         { expiresIn: config.jwt.expiresIn } as SignOptions
       );
+
+      await LoginHistoryModel.recordLogin(user.id, req.ip, req.headers['user-agent'] || '');
+      await AuditLogModel.logAction(user.id, 'login');
 
       return res.json({
         message: 'Login successful',

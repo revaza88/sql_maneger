@@ -21,3 +21,17 @@ adminRouter.put('/users/:userId/unblock', adminController.unblockUser);
 adminRouter.put('/users/:userId/password', adminController.resetPassword);
 adminRouter.get('/stats', adminController.getStats);
 
+// new admin features
+adminRouter.get('/login-history', adminController.getLoginHistory);
+adminRouter.get('/audit-logs', adminController.getAuditLogs);
+
+adminRouter.get('/notifications', adminController.listNotifications);
+adminRouter.post('/notifications', adminController.createNotification);
+adminRouter.put('/notifications/:id', adminController.updateNotification);
+adminRouter.delete('/notifications/:id', adminController.deleteNotification);
+
+adminRouter.get('/roles', adminController.listRoles);
+adminRouter.post('/roles', adminController.createRole);
+
+adminRouter.get('/system-stats', adminController.getSystemStats);
+
