@@ -102,7 +102,7 @@ export default function AdminPage() {
     try {
       await adminApi.resetPassword(userId, newPassword, token);
       toast.success('Password reset');
-    } catch (err) {
+    } catch {
       toast.error('Failed to reset password');
     }
   };

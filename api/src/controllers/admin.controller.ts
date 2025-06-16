@@ -26,7 +26,6 @@ export class AdminController {
     }
   };
 
-  // TODO: Implement other admin actions like updateUserRole, deleteUser, etc.
   
   public updateUserRole = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
