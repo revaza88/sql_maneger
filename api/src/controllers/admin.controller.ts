@@ -1,5 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { UserModel } from '../models/user.model'; // Assuming UserModel can fetch all users
+import { UserModel } from '../models/user.model';
+import { LoginHistoryModel } from '../models/login-history.model';
+import { AuditLogModel } from '../models/audit-log.model';
+import { NotificationModel } from '../models/notification.model';
+import { RoleModel } from '../models/role.model';
+import os from 'os';
 
 export class AdminController {
   public getUsers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
@@ -21,7 +26,6 @@ export class AdminController {
     }
   };
 
-  // TODO: Implement other admin actions like updateUserRole, deleteUser, etc.
   
   public updateUserRole = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -113,6 +117,92 @@ export class AdminController {
     } catch (error) {
       next(error);
     }
+  };
+
+  public getLoginHistory = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const history = await LoginHistoryModel.getHistory();
+      res.json({ status: 'success', data: history });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public getAuditLogs = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const logs = await AuditLogModel.getLogs();
+      res.json({ status: 'success', data: logs });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public listNotifications = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const notes = await NotificationModel.list();
+      res.json({ status: 'success', data: notes });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public createNotification = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { message, type, isActive } = req.body;
+      const note = await NotificationModel.create(message, type, isActive);
+      res.json({ status: 'success', data: note });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public updateNotification = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { message, type, isActive } = req.body;
+      const updated = await NotificationModel.update(parseInt(id, 10), message, type, isActive);
+      res.json({ status: updated ? 'success' : 'error' });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public deleteNotification = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const deleted = await NotificationModel.delete(parseInt(id, 10));
+      res.json({ status: deleted ? 'success' : 'error' });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public listRoles = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const roles = await RoleModel.list();
+      res.json({ status: 'success', data: roles });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public createRole = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { name, description } = req.body;
+      const role = await RoleModel.create(name, description);
+      res.json({ status: 'success', data: role });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public getSystemStats = async (_req: Request, res: Response): Promise<void> => {
+    const stats = {
+      freeMem: os.freemem(),
+      totalMem: os.totalmem(),
+      load: os.loadavg()[0]
+    };
+    res.json({ status: 'success', data: stats });
   };
   
 }
