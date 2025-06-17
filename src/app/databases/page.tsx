@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Trash2, Download, Upload, Database, Cloud, HardDrive, X } from 'lucide-react';
+import { Plus, Trash2, Download, Upload, Database, Cloud, HardDrive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Table,
