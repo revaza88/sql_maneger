@@ -14,6 +14,7 @@ import { adminRouter } from './routes/admin.routes'; // Added adminRouter import
 import sqlServerRouter from './routes/sqlserver.routes';
 import { sqlServerConfigRouter } from './routes/sql-server-config.routes';
 import backupRouter from './routes/backup.routes';
+import dashboardRouter from './routes/dashboard.routes';
 import { DatabaseService } from './database/DatabaseService';
 import { initializeDatabase } from './database/init';
 import { initializeBackupScheduler } from './controllers/backup.controller';
@@ -64,6 +65,7 @@ app.use('/api/admin', adminRouter); // Added adminRouter usage
 app.use('/api/sqlserver', sqlServerRouter);
 app.use('/api/sql-server-config', sqlServerConfigRouter); // SQL Server configuration management
 app.use('/api/backup', backupRouter); // Backup management
+app.use('/api/dashboard', dashboardRouter); // Dashboard statistics
 
 // Error handling
 app.use(errorHandler);

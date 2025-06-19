@@ -387,3 +387,26 @@ export const backupApi = {
     return response.data;
   },
 };
+
+export const dashboardApi = {
+  getOverviewStats: async () => {
+    const response = await api.get('/dashboard/overview');
+    return response.data;
+  },
+  getBackupStats: async () => {
+    const response = await api.get('/dashboard/backup-stats');
+    return response.data;
+  },
+  getDatabaseHealth: async () => {
+    const response = await api.get('/dashboard/database-health');
+    return response.data;
+  },
+  getRecentActivity: async (limit: number = 10) => {
+    const response = await api.get(`/dashboard/recent-activity?limit=${limit}`);
+    return response.data;
+  },
+  getAlerts: async () => {
+    const response = await api.get('/dashboard/alerts');
+    return response.data;
+  }
+};
