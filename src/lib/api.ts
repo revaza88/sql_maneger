@@ -356,4 +356,34 @@ export const backupApi = {
     const response = await api.get(`/backup/databases/${connectionId}`);
     return response.data;
   },
+
+  // Batch backups
+  createBatchBackup: async () => {
+    const response = await api.post('/backup/batch-backup');
+    return response.data;
+  },
+  getBatchBackups: async () => {
+    const response = await api.get('/backup/batch-backups');
+    return response.data;
+  },
+  getBatchBackupDetails: async (batchId: string) => {
+    const response = await api.get(`/backup/batch-backups/${batchId}`);
+    return response.data;
+  },
+  restoreBatchBackup: async (batchId: string) => {
+    const response = await api.post(`/backup/batch-restore/${batchId}`);
+    return response.data;
+  },
+  restoreSingleFromBatch: async (batchId: string, database: string) => {
+    const response = await api.post(`/backup/batch-restore/${batchId}/${database}`);
+    return response.data;
+  },
+  deleteBatchBackup: async (batchId: string) => {
+    const response = await api.delete(`/backup/batch-backups/${batchId}`);
+    return response.data;
+  },
+  getRestoreStatus: async (operationId: string) => {
+    const response = await api.get(`/backup/restore-status/${operationId}`);
+    return response.data;
+  },
 };

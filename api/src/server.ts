@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { config } from './config';
+import { config } from './config/index';
 import logger from "./utils/logger";
 import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth';

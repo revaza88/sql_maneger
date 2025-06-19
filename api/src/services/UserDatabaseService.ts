@@ -485,4 +485,57 @@ export class UserDatabaseService {
       await adminPool.close();
     }
   }
+
+  /**
+   * Get all databases in the SQL Server instance (Admin only)
+   */
+  static async getAllDatabases(): Promise<any[]> {
+    try {
+      const adminPool = new sql.ConnectionPool({
+        user: config.database.user,
+        password: config.database.password,
+        server: config.database.server,
+        port: 1433,
+        database: 'master',
+        options: {
+          encrypt: false,
+          trustServerCertificate: true,
+          enableArithAbort: true
+        }
+      });
+
+      await adminPool.connect();
+
+      try {
+        const result = await adminPool.request().query(`
+          SELECT 
+            name,
+            database_id,
+            CAST(DATABASEPROPERTYEX(name, 'Status') AS varchar(50)) as state_desc,
+            create_date,
+            CASE 
+              WHEN name IN ('master', 'tempdb', 'model', 'msdb') THEN 'System'
+              ELSE 'User'
+            END as database_type
+          FROM sys.databases 
+          WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb')
+          AND state = 0  -- Online databases only
+          ORDER BY name
+        `);
+
+        return result.recordset.map(db => ({
+          name: String(db.name),
+          id: db.database_id,
+          state_desc: String(db.state_desc),
+          create_date: new Date(db.create_date).toISOString(),
+          database_type: String(db.database_type)
+        }));
+      } finally {
+        await adminPool.close();
+      }
+    } catch (error) {
+      console.error('Error getting all databases:', error);
+      throw error;
+    }
+  }
 }

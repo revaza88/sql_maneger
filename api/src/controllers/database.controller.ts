@@ -5,6 +5,20 @@ import { UserDatabaseModel } from '../models/user-database.model';
 import * as fs from 'fs';
 import * as path from 'path';
 
+/*
+ * ADMIN ACCESS POLICY:
+ * 
+ * All users with role 'ADMIN' have complete access to:
+ * - ALL databases (view, query, backup, restore, delete)
+ * - ALL database tables and data
+ * - ALL backup operations regardless of database ownership
+ * - ALL backup history and download functions
+ * 
+ * Regular users are restricted to:
+ * - Only their own databases that they have created/own
+ * - Only operations on databases they have ownership of
+ */
+
 export class DatabaseController {
   private db: DatabaseService;
 
@@ -38,10 +52,18 @@ export class DatabaseController {
         return;
       }
 
-      // Use UserDatabaseService to get only user's own databases
-      const databases = await UserDatabaseService.getUserDatabases(req.user.id);
+      let databases;
       
-      console.log(`Successfully retrieved ${databases.length} databases for user ${req.user.id}`);
+      // All admins have access to ALL databases
+      if (req.user.role?.toUpperCase() === 'ADMIN') {
+        // Use DatabaseService to get all databases for admin users
+        databases = await this.db.getDatabases();
+        console.log(`Admin user ${req.user.id} retrieved ${databases.length} total databases`);
+      } else {
+        // Use UserDatabaseService to get only user's own databases for regular users
+        databases = await UserDatabaseService.getUserDatabases(req.user.id);
+        console.log(`Regular user ${req.user.id} retrieved ${databases.length} own databases`);
+      }
       
       res.json({ 
         status: 'success', 
@@ -73,8 +95,19 @@ export class DatabaseController {
         return;
       }
 
-      // Use UserDatabaseService to ensure user owns the database
-      const tables = await UserDatabaseService.getDatabaseTables(req.user.id, database);
+      let tables;
+      
+      // All admins can access tables from ANY database
+      if (req.user.role?.toUpperCase() === 'ADMIN') {
+        // Use DatabaseService to get tables from any database for admin users
+        tables = await this.db.getTables(database);
+        console.log(`Admin user ${req.user.id} accessed tables from database: ${database}`);
+      } else {
+        // Use UserDatabaseService to ensure user owns the database (for regular users)
+        tables = await UserDatabaseService.getDatabaseTables(req.user.id, database);
+        console.log(`Regular user ${req.user.id} accessed own database tables: ${database}`);
+      }
+      
       res.json({ status: 'success', data: tables });
     } catch (error) {
       res.status(500).json({ status: 'error', message: 'Failed to fetch tables', error });
@@ -100,8 +133,19 @@ export class DatabaseController {
         return;
       }
 
-      // Use UserDatabaseService to ensure user owns the database
-      const result = await UserDatabaseService.executeQuery(req.user.id, database, query);
+      let result;
+      
+      // All admins can execute queries on ANY database
+      if (req.user.role?.toUpperCase() === 'ADMIN') {
+        // Use DatabaseService to execute queries on any database for admin users
+        result = await this.db.executeQuery(database, query);
+        console.log(`Admin user ${req.user.id} executed query on database: ${database}`);
+      } else {
+        // Use UserDatabaseService to ensure user owns the database (for regular users)
+        result = await UserDatabaseService.executeQuery(req.user.id, database, query);
+        console.log(`Regular user ${req.user.id} executed query on own database: ${database}`);
+      }
+      
       res.json({ status: 'success', data: result });
     } catch (error) {
       res.status(500).json({ status: 'error', message: 'Query execution failed', error });
@@ -156,8 +200,17 @@ export class DatabaseController {
         return;
       }
 
-      // Use UserDatabaseService to delete database (only if user owns it)
-      await UserDatabaseService.deleteDatabase(req.user.id, databaseName);
+      // All admins can delete ANY database
+      if (req.user.role?.toUpperCase() === 'ADMIN') {
+        // Use DatabaseService to delete any database for admin users
+        await this.db.deleteDatabase(databaseName);
+        console.log(`Admin user ${req.user.id} deleted database: ${databaseName}`);
+      } else {
+        // Use UserDatabaseService to delete database (only if user owns it) for regular users
+        await UserDatabaseService.deleteDatabase(req.user.id, databaseName);
+        console.log(`Regular user ${req.user.id} deleted own database: ${databaseName}`);
+      }
+      
       res.json({ status: 'success', message: `Database ${databaseName} deleted successfully` });
     } catch (error) {
       let message = 'Failed to delete database';
@@ -190,8 +243,19 @@ export class DatabaseController {
       // Log the backup request
       console.log(`Received backup request for database "${databaseName}" with path "${backupPath || 'default'}" from user ${req.user.id}`);
       
-      // Use UserDatabaseService to backup database (only if user owns it)
-      const finalBackupPath = await UserDatabaseService.backupDatabase(req.user.id, databaseName, backupPath);
+      let finalBackupPath;
+      
+      // All admins can backup ANY database
+      if (req.user.role?.toUpperCase() === 'ADMIN') {
+        // Use DatabaseService to backup any database for admin users
+        await this.db.backupDatabase(databaseName, backupPath || `C:\\SQLBackups\\${databaseName}_admin_${new Date().toISOString().replace(/[:.]/g, '-')}.bak`);
+        finalBackupPath = backupPath || `Admin backup of ${databaseName}`;
+        console.log(`Admin user ${req.user.id} backed up database: ${databaseName}`);
+      } else {
+        // Use UserDatabaseService to backup database (only if user owns it) for regular users
+        finalBackupPath = await UserDatabaseService.backupDatabase(req.user.id, databaseName, backupPath);
+        console.log(`Regular user ${req.user.id} backed up own database: ${databaseName}`);
+      }
       
       res.json({ 
         status: 'success', 
@@ -259,8 +323,16 @@ export class DatabaseController {
         console.warn('Backup file does not have .bak extension, this might cause issues');
       }
       
-      // Use UserDatabaseService to restore database (only if user owns it)
-      await UserDatabaseService.restoreDatabase(req.user.id, databaseName, backupPath);
+      // All admins can restore ANY database from ANY backup
+      if (req.user.role?.toUpperCase() === 'ADMIN') {
+        // Use DatabaseService to restore any database for admin users
+        await this.db.restoreDatabase(databaseName, backupPath);
+        console.log(`Admin user ${req.user.id} restored database: ${databaseName}`);
+      } else {
+        // Use UserDatabaseService to restore database (only if user owns it) for regular users
+        await UserDatabaseService.restoreDatabase(req.user.id, databaseName, backupPath);
+        console.log(`Regular user ${req.user.id} restored own database: ${databaseName}`);
+      }
       
       res.json({ 
         status: 'success', 
@@ -319,8 +391,18 @@ export class DatabaseController {
       
       console.log(`Retrieving backup history${databaseName ? ' for ' + databaseName : ''} for user ${req.user.id}`);
       
-      // Use UserDatabaseService to get backup history (only for user's databases)
-      const backupHistory = await UserDatabaseService.getBackupHistory(req.user.id, databaseName);
+      let backupHistory;
+      
+      // All admins can view backup history for ANY database
+      if (req.user.role?.toUpperCase() === 'ADMIN') {
+        // Use DatabaseService to get backup history for any database for admin users
+        backupHistory = await this.db.getBackupHistory(databaseName);
+        console.log(`Admin user ${req.user.id} accessed backup history for database: ${databaseName || 'all databases'}`);
+      } else {
+        // Use UserDatabaseService to get backup history (only for user's databases) for regular users
+        backupHistory = await UserDatabaseService.getBackupHistory(req.user.id, databaseName);
+        console.log(`Regular user ${req.user.id} accessed backup history for own databases`);
+      }
       
       res.json({ 
         status: 'success', 
@@ -370,14 +452,17 @@ export class DatabaseController {
         return;
       }
       
-      // Check if user owns this database
-      const owns = await UserDatabaseModel.userOwnsDatabase(req.user.id, databaseName);
-      if (!owns) {
-        res.status(403).json({
-          status: 'error',
-          message: 'You do not have permission to download backup for this database'
-        });
-        return;
+      // All admins can download backup for ANY database
+      if (req.user.role?.toUpperCase() !== 'ADMIN') {
+        // Check if user owns this database (only for regular users)
+        const owns = await UserDatabaseModel.userOwnsDatabase(req.user.id, databaseName);
+        if (!owns) {
+          res.status(403).json({
+            status: 'error',
+            message: 'You do not have permission to download backup for this database'
+          });
+          return;
+        }
       }
       
       console.log(`Creating backup for download: ${databaseName} for user ${req.user.id}`);

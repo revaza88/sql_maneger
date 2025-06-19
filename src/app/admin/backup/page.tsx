@@ -42,6 +42,28 @@ interface BackupFile {
   };
 }
 
+interface BatchBackup {
+  id: string;
+  timestamp: string;
+  databases: string[];
+  totalSize: string;
+  status: 'in-progress' | 'completed' | 'failed';
+  backupCount: number;
+  createdBy?: {
+    userId: number;
+    userEmail: string;
+  };
+}
+
+interface BatchBackupDetails extends BatchBackup {
+  backupFiles: {
+    database: string;
+    fileName: string;
+    size: string;
+    createdAt: string;
+  }[];
+}
+
 const CRON_PRESETS = [
   { label: 'ყოველდღე 2 საათზე', value: '0 2 * * *' },
   { label: 'ყოველ კვირას', value: '0 2 * * 0' },
@@ -53,11 +75,15 @@ const CRON_PRESETS = [
 export default function BackupManagement() {
   const [backupConfigs, setBackupConfigs] = useState<BackupConfig[]>([]);
   const [backupFiles, setBackupFiles] = useState<BackupFile[]>([]);
+  const [batchBackups, setBatchBackups] = useState<BatchBackup[]>([]);
+  const [selectedBatchDetails, setSelectedBatchDetails] = useState<BatchBackupDetails | null>(null);
   const [databases, setDatabases] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false);
+  const [isBatchDetailsDialogOpen, setIsBatchDetailsDialogOpen] = useState(false);
   const [selectedBackupFile, setSelectedBackupFile] = useState<BackupFile | null>(null);
+  const [batchBackupInProgress, setBatchBackupInProgress] = useState(false);
   
   const { user, token, clearAuth } = useAuthStore();
   const router = useRouter();
@@ -99,19 +125,20 @@ export default function BackupManagement() {
       userRole: authState.user?.role 
     });
   }, []);
-
   const loadData = async () => {
     try {
       setLoading(true);
-      const [configsRes, filesRes, databasesRes] = await Promise.all([
+      const [configsRes, filesRes, databasesRes, batchBackupsRes] = await Promise.all([
         backupApi.getConfigs(),
         backupApi.getFiles(),
-        backupApi.getDatabases('1') // Default connection
+        backupApi.getDatabases('1'), // Default connection
+        backupApi.getBatchBackups()
       ]);
 
       setBackupConfigs(configsRes);
       setBackupFiles(filesRes);
       setDatabases(databasesRes);
+      setBatchBackups(batchBackupsRes);
     } catch (error) {
       toast.error('მონაცემების ჩატვირთვის შეცდომა');
       console.error('Error loading data:', error);
@@ -141,6 +168,121 @@ export default function BackupManagement() {
       console.error('Error creating config:', error);
     }
   };
+
+  // Batch backup functions
+  const createBatchBackup = async () => {
+    if (!confirm('ნამდვილად გსურთ ყველა ბაზის ბაჩ ბექაპის შექმნა?')) return;
+    
+    try {
+      setBatchBackupInProgress(true);
+      const result = await backupApi.createBatchBackup();
+      toast.success('ბაჩ ბექაპი დაიწყო');
+      console.log('Batch backup started:', result);
+      
+      // Reload data to show the new batch backup
+      setTimeout(() => {
+        loadData();
+      }, 2000);
+    } catch (error) {
+      toast.error('ბაჩ ბექაპის შექმნის შეცდომა');
+      console.error('Error creating batch backup:', error);
+    } finally {
+      setBatchBackupInProgress(false);
+    }
+  };
+
+  const loadBatchDetails = async (batchId: string) => {
+    try {
+      const details = await backupApi.getBatchBackupDetails(batchId);
+      setSelectedBatchDetails(details);
+      setIsBatchDetailsDialogOpen(true);
+    } catch (error) {
+      toast.error('ბაჩ ბექაპის დეტალების ჩატვირთვის შეცდომა');
+      console.error('Error loading batch details:', error);
+    }
+  };
+  const restoreBatchBackup = async (batchId: string) => {
+    if (!confirm('ნამდვილად გსურთ მთელი ბაჩ ბექაპის აღდგენა? ეს შეცვლის ყველა ბაზას.')) return;
+    
+    try {
+      setLoading(true);
+      
+      // Start the restore operation
+      const result = await backupApi.restoreBatchBackup(batchId);
+      const operationId = result.operationId;
+      
+      toast.success(`ბაჩ ბექაპის აღდგენა დაიწყო - ${result.totalDatabases} ბაზა`);
+      
+      // Poll for status updates
+      const pollStatus = async () => {
+        try {
+          const status = await backupApi.getRestoreStatus(operationId);
+          
+          if (status.status === 'completed') {
+            toast.success(`ბაჩ ბექაპი აღდგა: ${status.successCount} წარმატებული, ${status.failedCount} ჩავარდნილი`);
+            setLoading(false);
+            return;
+          } else if (status.status === 'failed') {
+            toast.error('ბაჩ ბექაპის აღდგენა ჩავარდა');
+            setLoading(false);
+            return;
+          } else {
+            // Still in progress, show progress
+            toast.info(`პროცესია: ${status.completedDatabases}/${status.totalDatabases} ბაზა დასრულდა`);
+            setTimeout(pollStatus, 3000); // Poll every 3 seconds
+          }
+        } catch (error) {
+          console.error('Error polling restore status:', error);
+          setLoading(false);
+          toast.error('სტატუსის შემოწმების შეცდომა');
+        }
+      };
+      
+      // Start polling after a short delay
+      setTimeout(pollStatus, 2000);
+      
+    } catch (error: any) {
+      setLoading(false);
+      if (error.response?.status === 429) {
+        toast.error('ძალიან ბევრი მოთხოვნა. გთხოვთ ცოტა ხანში სცადოთ');
+      } else {
+        toast.error('ბაჩ ბექაპის აღდგენის შეცდომა');
+      }
+      console.error('Error restoring batch backup:', error);
+    }
+  };  const restoreSingleFromBatch = async (batchId: string, database: string) => {
+    if (!confirm(`ნამდვილად გსურთ "${database}" ბაზის აღდგენა ბაჩ ბექაპიდან?`)) return;
+    
+    try {
+      setLoading(true);
+      const result = await backupApi.restoreSingleFromBatch(batchId, database);
+      toast.success(`ბაზა "${database}" წარმატებით აღდგა`);
+      console.log('Single restore result:', result);
+    } catch (error: any) {
+      if (error.response?.status === 429) {
+        toast.error('ძალიან ბევრი მოთხოვნა. გთხოვთ ცოტა ხანში სცადოთ');
+      } else {
+        toast.error(`ბაზის "${database}" აღდგენის შეცდომა`);
+      }
+      console.error('Error restoring single database:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteBatchBackup = async (batchId: string) => {
+    if (!confirm('ნამდვილად გსურთ ამ ბაჩ ბექაპის წაშლა?')) return;
+    
+    try {
+      await backupApi.deleteBatchBackup(batchId);
+      toast.success('ბაჩ ბექაპი წაიშალა');
+      loadData();
+    } catch (error) {
+      toast.error('ბაჩ ბექაპის წაშლის შეცდომა');
+      console.error('Error deleting batch backup:', error);
+    }
+  };
+
   const toggleConfig = async (id: string, enabled: boolean) => {
     try {
       await backupApi.updateConfig(id, { enabled });
@@ -235,6 +377,27 @@ export default function BackupManagement() {
     return new Date(dateString).toLocaleString('ka-GE');
   };
 
+  // Handle quick backup for specific database
+  const handleQuickBackup = async (database: string) => {
+    if (!confirm(`ნამდვილად გსურთ "${database}" ბაზის ბექაპი?`)) return;
+    
+    try {
+      setLoading(true);
+      const result = await backupApi.createManualBackup(database, '1'); // Using default connection ID
+      toast.success(`ბაზა "${database}" წარმატებით შექმნა ბექაპი`);
+      loadData(); // Reload data to show new backup
+    } catch (error: any) {
+      if (error.response?.status === 429) {
+        toast.error('ძალიან ბევრი მოთხოვნა. გთხოვთ ცოტა ხანში სცადოთ');
+      } else {
+        toast.error(`ბაზის "${database}" ბექაპის შეცდომა`);
+      }
+      console.error('Error creating quick backup:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Show loading if user is not authenticated or not admin
   if (!token || !user || user.role?.toLowerCase() !== 'admin') {
     return <LoadingSpinner />;
@@ -251,31 +414,25 @@ export default function BackupManagement() {
             ბექაპების მართვა
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-2">მართეთ ავტომატური და ხელით ბექაპები</p>
-        </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="shadow-lg">
-              <Plus className="h-4 w-4 mr-2" />
-              ახალი ბექაპის კონფიგურაცია
-            </Button>
-          </DialogTrigger>          <DialogContent className="max-w-2xl">
+        </div>        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <DialogContent className="max-w-2xl">
             <DialogHeader className="space-y-3">
               <DialogTitle className="flex items-center gap-2">
                 <Database className="h-6 w-6 text-blue-600" />
-                ახალი ბექაპის კონფიგურაცია
+                ახალი ავტომატური ბექაპის განრიგი
               </DialogTitle>
               <DialogDescription>
-                შექმენით ავტომატური ბექაპის რეჟიმი თქვენი მონაცემთა ბაზების უსაფრთხოებისთვის
+                შექმენით ავტომატური ბაჩ ბექაპის განრიგი ყველა ბაზისთვის
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-6 py-4">
               <div className="space-y-2">
-                <Label htmlFor="name">კონფიგურაციის დასახელება</Label>
+                <Label htmlFor="name">განრიგის დასახელება</Label>
                 <Input
                   id="name"
                   value={newConfig.name}
                   onChange={(e) => setNewConfig({ ...newConfig, name: e.target.value })}
-                  placeholder="მაგ: ყოველდღიური ბექაპი"
+                  placeholder="მაგ: ყოველდღიური ბაჩ ბექაპი"
                   className="w-full"
                 />
               </div>              <div className="space-y-2">
@@ -322,6 +479,15 @@ export default function BackupManagement() {
                 />
               </div>
 
+              <div className="bg-blue-50 p-4 rounded-lg space-y-2">
+                <h4 className="font-medium text-blue-900">📋 რა მოხდება:</h4>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• ავტომატურად შეიქმნება ყველა ბაზის ბაჩ ბექაპი</li>
+                  <li>• ბექაპები ინახება ცალკე ფოლდერში timestamp-ით</li>
+                  <li>• ძველი ბექაპები იშლება შენახვის ვადის გასვლის შემდეგ</li>
+                </ul>
+              </div>
+
               <div className="flex justify-end space-x-3 pt-4 border-t">
                 <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                   გაუქმება
@@ -333,18 +499,193 @@ export default function BackupManagement() {
             </div>
           </DialogContent>
         </Dialog>
-      </div>      <Tabs defaultValue="configs" className="space-y-8">
-        <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
-          <TabsTrigger value="configs">კონფიგურაციები</TabsTrigger>
-          <TabsTrigger value="files">ბექაპ ფაილები</TabsTrigger>
-          <TabsTrigger value="manual">ხელით ბექაპი</TabsTrigger>
+      </div>      <Tabs defaultValue="quick" className="space-y-8">        <TabsList className="grid w-full grid-cols-4 lg:w-[600px]">
+          <TabsTrigger value="quick">⚡ სწრაფი ბექაპი</TabsTrigger>
+          <TabsTrigger value="automatic">📦 ბაჩ ბექაპები</TabsTrigger>
+          <TabsTrigger value="schedule">⚙️ განრიგი</TabsTrigger>
+          <TabsTrigger value="all">📂 ყველა ბექაპი</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="configs">
-          <Card>
-            <CardHeader>              <CardTitle>ბექაპის კონფიგურაციები</CardTitle>
+        <TabsContent value="quick">
+          <div className="space-y-6">
+            {/* სწრაფი სრული ბექაპი */}
+            <Card>
+              <CardHeader>
+                <CardTitle>📦 ყველა ბაზის ბექაპი</CardTitle>
+                <CardDescription>
+                  სისტემაში არსებული ყველა ბაზის ერთდროული ბექაპი
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      შექმნის ყველა ბაზის ბექაპს ერთ ფოლდერში
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      მონაცემთა ბაზების რაოდენობა: {databases.length}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={createBatchBackup}
+                    disabled={batchBackupInProgress || loading}
+                    size="lg"
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    {batchBackupInProgress ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        პროცესშია...
+                      </>
+                    ) : (
+                      <>
+                        <Database className="mr-2 h-4 w-4" />
+                        ყველას ბექაპი
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* კონკრეტული ბაზის ბექაპი */}
+            <Card>
+              <CardHeader>
+                <CardTitle>⚡ კონკრეტული ბაზის ბექაპი</CardTitle>
+                <CardDescription>
+                  აირჩიეთ კონკრეტული ბაზა სწრაფი ბექაპისთვის
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {databases.map((database) => (
+                      <Card key={database} className="hover:shadow-md transition-shadow">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2">
+                              <Database className="h-5 w-5 text-blue-500" />
+                              <span className="font-medium">{database}</span>
+                            </div>
+                            <Button
+                              size="sm"
+                              onClick={() => handleQuickBackup(database)}
+                              disabled={loading}
+                              variant="outline"
+                            >
+                              ბექაპი
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                  {databases.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      ბაზები არ მოიძებნა
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="automatic">
+          <Card>            <CardHeader>
+              <CardTitle>📦 ყველა ბაჩ ბექაპი</CardTitle>
               <CardDescription>
-                ავტომატური ბექაპის პარამეტრები და განრიგი
+                ყველა ბაზის ერთდროული ბექაპები (ხელით და ავტომატურად შექმნილი)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ბაჩ ID</TableHead>
+                    <TableHead>თარიღი</TableHead>
+                    <TableHead>ბაზების რაოდენობა</TableHead>
+                    <TableHead>მოცულობა</TableHead>
+                    <TableHead>სტატუსი</TableHead>
+                    <TableHead>შემქმნელი</TableHead>
+                    <TableHead>მოქმედებები</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {batchBackups.map((batch) => (
+                    <TableRow key={batch.id}>
+                      <TableCell className="font-mono text-xs">{batch.id}</TableCell>
+                      <TableCell>{formatDate(batch.timestamp)}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{batch.databases.length} ბაზა</Badge>
+                      </TableCell>
+                      <TableCell>{batch.totalSize}</TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant={
+                            batch.status === 'completed' ? 'default' : 
+                            batch.status === 'in-progress' ? 'secondary' : 'destructive'
+                          }
+                        >
+                          {batch.status === 'completed' ? 'დასრულებული' : 
+                           batch.status === 'in-progress' ? 'პროცესშია' : 'ჩავარდნილი'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={
+                          batch.createdBy?.userEmail === 'system@scheduler' ? 'secondary' :
+                          batch.id.startsWith('manual_') ? 'outline' : 'default'
+                        }>
+                          {batch.createdBy?.userEmail === 'system@scheduler' ? 'ავტომატური' :
+                           batch.id.startsWith('manual_') ? 'განრიგიდან' : 
+                           batch.createdBy?.userEmail || 'ხელით'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex space-x-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => loadBatchDetails(batch.id)}
+                          >
+                            დეტალები
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => restoreBatchBackup(batch.id)}
+                            disabled={loading}
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                          >
+                            აღდგენა
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deleteBatchBackup(batch.id)}
+                            disabled={loading}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {batchBackups.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  ბაჩ ბექაპები არ მოიძებნა
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="schedule">
+          <Card>
+            <CardHeader>
+              <CardTitle>⚙️ ავტომატური ბექაპის განრიგი</CardTitle>
+              <CardDescription>
+                ავტომატური ბაჩ ბექაპების პარამეტრები და განრიგი
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -372,33 +713,21 @@ export default function BackupManagement() {
                         {config.lastBackup ? formatDate(config.lastBackup) : 'არ ყოფილა'}
                       </TableCell>
                       <TableCell>
-                        <div className="flex space-x-2">
-                          <Button
+                        <div className="flex space-x-2">                          <Button
                             size="sm"
-                            variant={config.enabled ? "outline" : "default"}
-                            onClick={() => toggleConfig(config.id, !config.enabled)}
-                            title={config.enabled ? 'კონფიგურაციის გამორთვა' : 'კონფიგურაციის ჩართვა'}
-                          >
-                            {config.enabled ? 'გამორთვა' : 'ჩართვა'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="default"
+                            variant="outline"
                             onClick={() => runConfigBackup(config.id, config.name)}
                             disabled={loading}
-                            title="ბექაპის ახლავე გაშვება"
                           >
-                            <RefreshCw className="h-3 w-3 mr-1" />
                             გაშვება
                           </Button>
                           <Button
                             size="sm"
                             variant="destructive"
                             onClick={() => deleteConfig(config.id)}
-                            title="კონფიგურაციის წაშლა"
+                            disabled={loading}
                           >
-                            <Trash2 className="h-3 w-3 mr-1" />
-                            წაშლა
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
@@ -406,17 +735,310 @@ export default function BackupManagement() {
                   ))}
                 </TableBody>
               </Table>
+
+              <div className="mt-6">
+                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  ახალი განრიგი
+                </Button>
+              </div>
             </CardContent>
           </Card>
-        </TabsContent>        <TabsContent value="files">
+        </TabsContent>
+
+        <TabsContent value="all">
+          <div className="space-y-6">
+            {/* ყველა ბაჩ ბექაპი */}
+            <Card>
+              <CardHeader>
+                <CardTitle>📦 ყველა ბაჩ ბექაპი</CardTitle>
+                <CardDescription>
+                  ხელით და ავტომატურად შექმნილი ყველა ბაჩ ბექაპი
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ბაჩ ID</TableHead>
+                      <TableHead>თარიღი</TableHead>
+                      <TableHead>ბაზების რაოდენობა</TableHead>
+                      <TableHead>მოცულობა</TableHead>
+                      <TableHead>სტატუსი</TableHead>
+                      <TableHead>შემქმნელი</TableHead>
+                      <TableHead>მოქმედებები</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {batchBackups.map((batch) => (
+                      <TableRow key={batch.id}>
+                        <TableCell className="font-mono text-xs">{batch.id}</TableCell>
+                        <TableCell>{formatDate(batch.timestamp)}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{batch.databases.length} ბაზა</Badge>
+                        </TableCell>
+                        <TableCell>{batch.totalSize}</TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={
+                              batch.status === 'completed' ? 'default' : 
+                              batch.status === 'in-progress' ? 'secondary' : 'destructive'
+                            }
+                          >
+                            {batch.status === 'completed' ? 'დასრულებული' : 
+                             batch.status === 'in-progress' ? 'პროცესშია' : 'ჩავარდნილი'}
+                        </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={batch.createdBy?.userEmail === 'system@scheduler' ? 'secondary' : 'default'}>
+                            {batch.createdBy?.userEmail === 'system@scheduler' ? 'ავტომატური' : batch.createdBy?.userEmail}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => loadBatchDetails(batch.id)}
+                            >
+                              დეტალები
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => restoreBatchBackup(batch.id)}
+                              disabled={loading}
+                              className="bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                              აღდგენა
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => deleteBatchBackup(batch.id)}
+                              disabled={loading}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {batchBackups.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    ბაჩ ბექაპები არ მოიძებნა
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* ინდივიდუალური ბექაპ ფაილები */}
+            <Card>
+              <CardHeader>
+                <CardTitle>💾 ინდივიდუალური ბექაპ ფაილები</CardTitle>
+                <CardDescription>
+                  კონკრეტული ბაზების ცალკეული ბექაპ ფაილები
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>ბაზა</TableHead>
+                      <TableHead>ფაილის სახელი</TableHead>
+                      <TableHead>მოცულობა</TableHead>
+                      <TableHead>თარიღი</TableHead>
+                      <TableHead>ტიპი</TableHead>
+                      <TableHead>მოქმედებები</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {backupFiles.map((file) => (
+                      <TableRow key={file.id}>
+                        <TableCell className="font-medium">{file.database}</TableCell>
+                        <TableCell className="font-mono text-xs">{file.fileName}</TableCell>
+                        <TableCell>{(file.size / 1024 / 1024).toFixed(2)} MB</TableCell>
+                        <TableCell>{formatDate(file.createdAt)}</TableCell>
+                        <TableCell>
+                          <Badge variant={file.type === 'manual' ? 'default' : 'secondary'}>
+                            {file.type === 'manual' ? 'ხელით' : 'ავტომატური'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedBackupFile(file);
+                                setIsRestoreDialogOpen(true);
+                              }}
+                            >
+                              აღდგენა
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => deleteBackupFile(file.id)}
+                              disabled={loading}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                {backupFiles.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    ინდივიდუალური ბექაპ ფაილები არ მოიძებნა
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>        <TabsContent value="batch">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>ბაჩ ბექაპები</CardTitle>
+                  <CardDescription>
+                    ყველა ბაზის ერთად დაბექაპება და აღდგენა
+                  </CardDescription>
+                </div>
+                <Button 
+                  onClick={createBatchBackup}
+                  disabled={batchBackupInProgress || loading}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {batchBackupInProgress ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      იქმნება...
+                    </>
+                  ) : (
+                    <>
+                      <Database className="h-4 w-4 mr-2" />
+                      ყველა ბაზის ბექაპი
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {batchBackups.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>ბაჩ ბექაპები არ არის</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {batchBackups.map((batch) => (
+                    <div key={batch.id} className="border rounded-lg p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="flex items-center space-x-2">
+                            <Database className="h-5 w-5 text-blue-600" />
+                            <span className="font-medium">
+                              ბაჩ ბექაპი - {new Date(batch.timestamp).toLocaleString('ka-GE')}
+                            </span>
+                          </div>
+                          <Badge 
+                            variant={batch.status === 'completed' ? 'default' : 
+                                   batch.status === 'in-progress' ? 'secondary' : 'destructive'}
+                          >
+                            {batch.status === 'completed' ? 'დასრულებული' :
+                             batch.status === 'in-progress' ? 'მიმდინარე' : 'ჩავარდნილი'}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => loadBatchDetails(batch.id)}
+                            disabled={loading}
+                          >
+                            <Search className="h-4 w-4 mr-1" />
+                            დეტალები
+                          </Button>
+                          {batch.status === 'completed' && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => restoreBatchBackup(batch.id)}
+                                disabled={loading}
+                                className="text-green-600 hover:text-green-700"
+                              >
+                                <RefreshCw className="h-4 w-4 mr-1" />
+                                ყველას აღდგენა
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => deleteBatchBackup(batch.id)}
+                            disabled={loading}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                          <span className="text-muted-foreground">ბაზების რაოდენობა:</span>
+                          <div className="font-medium">{batch.databases.length}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">ბექაპების რაოდენობა:</span>
+                          <div className="font-medium">{batch.backupCount}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">ჯამური ზომა:</span>
+                          <div className="font-medium">{batch.totalSize}</div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">შემქმნელი:</span>
+                          <div className="font-medium">{batch.createdBy?.userEmail || 'N/A'}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-1">
+                        <span className="text-sm text-muted-foreground mr-2">ბაზები:</span>
+                        {batch.databases.slice(0, 5).map((db) => (
+                          <Badge key={db} variant="secondary" className="text-xs">
+                            {db}
+                          </Badge>
+                        ))}
+                        {batch.databases.length > 5 && (
+                          <Badge variant="secondary" className="text-xs">
+                            +{batch.databases.length - 5} სხვა
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="files">
           <Card>
             <CardHeader>
               <CardTitle>ბექაპ ფაილები</CardTitle>
               <CardDescription>
                 არსებული ბექაპ ფაილები და აღდგენის ოპციები
-              </CardDescription>
-            </CardHeader>
-            <CardContent><Table>
+              </CardDescription>            </CardHeader>
+            <CardContent>
+              <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>ბაზა</TableHead>
@@ -549,6 +1171,113 @@ export default function BackupManagement() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Backup Details Dialog */}
+      <Dialog open={isBatchDetailsDialogOpen} onOpenChange={setIsBatchDetailsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>ბაჩ ბექაპის დეტალები</DialogTitle>
+            <DialogDescription>
+              ბაჩ ბექაპში შემავალი ყველა ბაზისა და ფაილის დეტალური ინფორმაცია
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedBatchDetails && (
+            <div className="space-y-6">
+              {/* Overview */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted rounded-lg">
+                <div>
+                  <span className="text-sm text-muted-foreground">თარიღი:</span>
+                  <div className="font-medium">{new Date(selectedBatchDetails.timestamp).toLocaleString('ka-GE')}</div>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">სტატუსი:</span>
+                  <div>
+                    <Badge 
+                      variant={selectedBatchDetails.status === 'completed' ? 'default' : 
+                             selectedBatchDetails.status === 'in-progress' ? 'secondary' : 'destructive'}
+                    >
+                      {selectedBatchDetails.status === 'completed' ? 'დასრულებული' :
+                       selectedBatchDetails.status === 'in-progress' ? 'მიმდინარე' : 'ჩავარდნილი'}
+                    </Badge>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">ჯამური ზომა:</span>
+                  <div className="font-medium">{selectedBatchDetails.totalSize}</div>
+                </div>
+                <div>
+                  <span className="text-sm text-muted-foreground">შემქმნელი:</span>
+                  <div className="font-medium">{selectedBatchDetails.createdBy?.userEmail || 'N/A'}</div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3">
+                <Button
+                  onClick={() => restoreBatchBackup(selectedBatchDetails.id)}
+                  disabled={loading || selectedBatchDetails.status !== 'completed'}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  ყველა ბაზის აღდგენა
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setIsBatchDetailsDialogOpen(false);
+                    deleteBatchBackup(selectedBatchDetails.id);
+                  }}
+                  disabled={loading}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  ბაჩ ბექაპის წაშლა
+                </Button>
+              </div>
+
+              {/* Backup Files Table */}
+              <div>
+                <h3 className="text-lg font-semibold mb-3">ბექაპ ფაილები</h3>
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ბაზის სახელი</TableHead>
+                        <TableHead>ფაილის სახელი</TableHead>
+                        <TableHead>ზომა</TableHead>
+                        <TableHead>შექმნის თარიღი</TableHead>
+                        <TableHead>მოქმედებები</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {selectedBatchDetails.backupFiles.map((file) => (
+                        <TableRow key={file.database}>
+                          <TableCell className="font-medium">{file.database}</TableCell>
+                          <TableCell>{file.fileName}</TableCell>
+                          <TableCell>{file.size}</TableCell>
+                          <TableCell>{new Date(file.createdAt).toLocaleString('ka-GE')}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => restoreSingleFromBatch(selectedBatchDetails.id, file.database)}
+                              disabled={loading}
+                              className="text-green-600 hover:text-green-700"
+                            >
+                              <RefreshCw className="h-4 w-4 mr-1" />
+                              აღდგენა
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
