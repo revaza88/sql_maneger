@@ -89,7 +89,7 @@ export default function BackupManagement() {
   const [selectedBackupFile, setSelectedBackupFile] = useState<BackupFile | null>(null);
   const [batchBackupInProgress, setBatchBackupInProgress] = useState(false);
   
-  const { token } = useAuthStore();
+  const { user, token } = useAuthStore();
   const router = useRouter();
 
   // Authorization check
@@ -196,9 +196,13 @@ export default function BackupManagement() {
       }
     });
   };
-
   const loadBatchDetails = async (batchId: string) => {
     try {
+      const details = await backupApi.getBatchBackupDetails(batchId);
+      setSelectedBatchDetails(details);
+      setIsBatchDetailsDialogOpen(true);
+    } catch (error) {
+      toast.error('ბაჩ ბექაპის დეტალების ჩატვირთვის შეცდომა');
       console.error('Error loading batch details:', error);
     }
   };
