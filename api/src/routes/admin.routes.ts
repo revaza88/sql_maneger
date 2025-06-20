@@ -10,10 +10,9 @@ const adminController = new AdminController();
 adminRouter.use(authenticate);
 adminRouter.use((req, res, next) => authorizeAdmin(req, res, next)); 
 
-// Example admin route
+// User management routes
 adminRouter.get('/users', adminController.getUsers.bind(adminController));
-
-// Add other admin-specific routes here
+adminRouter.post('/users', adminController.createUser.bind(adminController)); // Added createUser route
 adminRouter.put('/users/:userId/role', adminController.updateUserRole);
 adminRouter.delete('/users/:userId', adminController.deleteUser);
 adminRouter.put('/users/:userId/block', adminController.blockUser);

@@ -428,15 +428,31 @@ export default function AdminDashboard() {
               <Archive className="h-4 w-4 mr-2" />
               ყველას ბექაპი
             </Button>
-            <Button variant="outline" className="border-green-200 text-green-700 hover:bg-green-50">
+            <Button 
+              variant="outline" 
+              className="border-green-200 text-green-700 hover:bg-green-50"
+              onClick={() => router.push('/admin/databases')}
+            >
               <Database className="h-4 w-4 mr-2" />
               ახალი ბაზა
             </Button>
-            <Button variant="outline" className="border-purple-200 text-purple-700 hover:bg-purple-50">
-              <BarChart3 className="h-4 w-4 mr-2" />
-              რეპორტი
+            <Button 
+              variant="outline" 
+              className="border-purple-200 text-purple-700 hover:bg-purple-50"
+              onClick={() => router.push('/admin/users')}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              მომხმარებლები
             </Button>
-            <Button variant="outline" className="border-orange-200 text-orange-700 hover:bg-orange-50">
+            <Button 
+              variant="outline" 
+              className="border-orange-200 text-orange-700 hover:bg-orange-50"
+              onClick={() => router.push('/admin/activity')}
+            >
+              <Activity className="h-4 w-4 mr-2" />
+              აქტივობა
+            </Button>
+            <Button variant="outline" className="border-gray-200 text-gray-700 hover:bg-gray-50">
               <Calendar className="h-4 w-4 mr-2" />
               განრიგი
             </Button>

@@ -177,6 +177,7 @@ export interface User {
   name?: string;
   role: "USER" | "ADMIN";
   isBlocked?: boolean;
+  lastLogin?: string; // Added lastLogin property
   createdAt?: string;
   updatedAt?: string;
 }
@@ -187,6 +188,12 @@ export const adminApi = {
     const response = await api.get('/admin/users', {
       headers: { Authorization: `Bearer ${token}` },
       params,
+    });
+    return response.data.data;
+  },
+  createUser: async (userData: { email: string; name: string; password: string; role: "USER" | "ADMIN" }, token: string): Promise<User> => {
+    const response = await api.post('/admin/users', userData, {
+      headers: { Authorization: `Bearer ${token}` },
     });
     return response.data.data;
   },
