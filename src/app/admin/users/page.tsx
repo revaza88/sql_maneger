@@ -271,12 +271,11 @@ export default function UserManagementPage() {
       console.error(err);
     }
   };
-
   const handleResetPassword = async () => {
     if (!token || !selectedUser || !newPassword) {
       toast.error("ახალი პაროლი სავალდებულოა");
       return;
-    };
+    }
     
     try {
       await adminApi.resetPassword(selectedUser.id, newPassword);
