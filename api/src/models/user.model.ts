@@ -13,9 +13,10 @@ export class UserModel {
       .input('name', sql.VarChar, user.name)
       .input('role', sql.VarChar, user.role || 'user')
       .input('isBlocked', sql.Bit, user.isBlocked ? 1 : 0)
+      .input('isPaused', sql.Bit, user.isPaused ? 1 : 0)
       .query(`
-        INSERT INTO Users (email, password, name, role, isBlocked, createdAt, updatedAt)
-        VALUES (@email, @password, @name, @role, @isBlocked, GETDATE(), GETDATE());
+        INSERT INTO Users (email, password, name, role, isBlocked, isPaused, createdAt, updatedAt)
+        VALUES (@email, @password, @name, @role, @isBlocked, @isPaused, GETDATE(), GETDATE());
         SELECT SCOPE_IDENTITY() as id;
       `);
     
@@ -27,6 +28,7 @@ export class UserModel {
       name: user.name,
       role: user.role || 'user',
       isBlocked: user.isBlocked || false,
+      isPaused: user.isPaused || false,
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -102,7 +104,7 @@ export class UserModel {
 
   // Added findAll method to fetch all users (excluding password)
   static async findAll(limit?: number, offset?: number, search?: string): Promise<Omit<User, 'password'>[]> {
-    let query = 'SELECT id, email, name, role, sqlServerUsername, isBlocked, createdAt, updatedAt FROM Users';
+    let query = 'SELECT id, email, name, role, sqlServerUsername, isBlocked, isPaused, createdAt, updatedAt FROM Users';
     const request = pool.request();
     if (search) {
       query += ' WHERE email LIKE @search OR name LIKE @search';
@@ -158,6 +160,21 @@ export class UserModel {
   static async countBlocked(): Promise<number> {
     const result = await pool.request()
       .query('SELECT COUNT(*) as total FROM Users WHERE isBlocked = 1');
+    return result.recordset[0].total;
+  }
+
+  static async setPaused(id: number, paused: boolean): Promise<boolean> {
+    const result = await pool.request()
+      .input('id', sql.Int, id)
+      .input('isPaused', sql.Bit, paused ? 1 : 0)
+      .input('updatedAt', sql.DateTime, new Date())
+      .query('UPDATE Users SET isPaused = @isPaused, updatedAt = @updatedAt WHERE id = @id');
+    return result.rowsAffected[0] > 0;
+  }
+
+  static async countPaused(): Promise<number> {
+    const result = await pool.request()
+      .query('SELECT COUNT(*) as total FROM Users WHERE isPaused = 1');
     return result.recordset[0].total;
   }
 

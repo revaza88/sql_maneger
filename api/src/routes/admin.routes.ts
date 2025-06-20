@@ -17,6 +17,8 @@ adminRouter.put('/users/:userId/role', adminController.updateUserRole);
 adminRouter.delete('/users/:userId', adminController.deleteUser);
 adminRouter.put('/users/:userId/block', adminController.blockUser);
 adminRouter.put('/users/:userId/unblock', adminController.unblockUser);
+adminRouter.put('/users/:userId/pause', adminController.pauseUser);
+adminRouter.put('/users/:userId/unpause', adminController.unpauseUser);
 adminRouter.put('/users/:userId/password', adminController.resetPassword);
 adminRouter.get('/stats', adminController.getStats);
 
@@ -39,4 +41,5 @@ adminRouter.delete('/databases/:databaseName', adminController.deleteDatabase);
 adminRouter.post('/databases/:databaseName/backup', adminController.backupDatabase);
 
 adminRouter.get('/system-stats', adminController.getSystemStats);
+adminRouter.post('/migrate', adminController.runMigration);
 

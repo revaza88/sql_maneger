@@ -5,6 +5,7 @@ import { adminApi, dashboardApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useRouter } from 'next/navigation';
 import { LoadingSpinner } from '@/components/loading-spinner';
+import { AdminLayout } from '@/components/admin-layout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -134,8 +135,8 @@ export default function AdminDashboard() {
           recentActivityData, 
           alertsData
         ] = await Promise.all([
-          adminApi.getStats(token),
-          adminApi.getSystemStats(token),
+          adminApi.getStats(),
+          adminApi.getSystemStats(),
           dashboardApi.getBackupStats().catch(() => ({
             totalBackups: 15,
             todayBackups: 3,
@@ -307,43 +308,42 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="p-6 space-y-6 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 min-h-screen">
-      {/* Enhanced Header with Real-time Status */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
-            🏠 SQL Manager Dashboard
-          </h1>
+    <AdminLayout 
+      title="SQL Manager Dashboard" 
+      description="Real-time system monitoring and statistics"
+      icon={<BarChart3 className="h-6 w-6 text-blue-600" />}
+    >
+      <div className="space-y-6">
+        {/* Status and Actions */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="flex items-center space-x-4">
-            <p className="text-gray-600">Real-time system monitoring and statistics</p>
             <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
               <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
               🟢 ჯანმრთელი
             </Badge>
           </div>
-        </div>
-        <div className="flex items-center space-x-3">
-          <Button 
-            onClick={handleRefresh} 
-            variant="outline"
-            className="flex items-center gap-2 bg-white hover:bg-gray-50"
-            disabled={refreshing}
-          >
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-            განახლება
-          </Button>
-          {alerts.length > 0 && (
-            <Button variant="outline" className="relative bg-white hover:bg-gray-50">
-              <Bell className="h-4 w-4" />
-              {alerts.length > 0 && (
-                <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 text-xs bg-red-500">
-                  {alerts.length}
-                </Badge>
-              )}
+          <div className="flex items-center space-x-3">
+            <Button 
+              onClick={handleRefresh} 
+              variant="outline"
+              className="flex items-center gap-2"
+              disabled={refreshing}
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              განახლება
             </Button>
-          )}
+            {alerts.length > 0 && (
+              <Button variant="outline" className="relative">
+                <Bell className="h-4 w-4" />
+                {alerts.length > 0 && (
+                  <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 text-xs bg-red-500">
+                    {alerts.length}
+                  </Badge>
+                )}
+              </Button>
+            )}
+          </div>
         </div>
-      </div>
 
       {/* Hero Stats Section */}
       {(stats && backupStats && databaseHealth) && (
@@ -999,5 +999,6 @@ export default function AdminDashboard() {
         </Button>
       </div>
     </div>
+    </AdminLayout>
   );
 }

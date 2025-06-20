@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { adminApi, User as ApiUser } from "../../../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { adminApi, User as ApiUser } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -43,6 +43,7 @@ import { toast } from "sonner";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/loading-spinner";
+import { AdminLayout } from "@/components/admin-layout";
 import {
   Search,
   Users,
@@ -62,13 +63,31 @@ import {
   UserCheck,
   Calendar,
   Mail,
+  Pause,
+  Play,
+  EyeOff,
 } from "lucide-react";
+
+// Constants for filters
+const ROLE_FILTER = {
+  ALL: "all",
+  ADMIN: "ADMIN",
+  USER: "USER",
+};
+
+const STATUS_FILTER = {
+  ALL: "all",
+  ACTIVE: "active",
+  BLOCKED: "blocked",
+  PAUSED: "paused",
+};
 
 interface UserStats {
   total: number;
   admins: number;
   active: number;
   blocked: number;
+  paused: number;
 }
 
 interface CreateUserData {
@@ -80,13 +99,21 @@ interface CreateUserData {
 
 export default function UserManagementPage() {
   const [users, setUsers] = useState<ApiUser[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<ApiUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [roleFilter, setRoleFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [roleFilter, setRoleFilter] = useState<string>(ROLE_FILTER.ALL);
+  const [statusFilter, setStatusFilter] = useState<string>(STATUS_FILTER.ALL);
+  
+  // State for dialogs
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<ApiUser | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
+
   const [newUser, setNewUser] = useState<CreateUserData>({
     email: "",
     name: "",
@@ -94,45 +121,25 @@ export default function UserManagementPage() {
     role: "USER",
   });
 
-  const { user, token, clearAuth } = useAuthStore();
+  const { user, token } = useAuthStore();
   const router = useRouter();
 
   // Statistics calculation
-  const userStats: UserStats = {
+  const userStats: UserStats = useMemo(() => ({
     total: users.length,
     admins: users.filter(u => u.role === "ADMIN").length,
-    active: users.filter(u => !u.isBlocked).length,
+    active: users.filter(u => !u.isBlocked && !u.isPaused).length,
     blocked: users.filter(u => u.isBlocked).length,
-  };
+    paused: users.filter(u => u.isPaused).length,
+  }), [users]);
 
   useEffect(() => {
-    if (!token || user?.role?.toLowerCase() !== "admin") {
-      router.push("/admin/login");
-      return;
+    if (token) {
+      fetchUsers();
     }
-    fetchUsers();
-  }, [token, user, router]);
+  }, [token]);
 
-  useEffect(() => {
-    filterUsers();
-  }, [users, searchTerm, roleFilter, statusFilter]);
-
-  const fetchUsers = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const fetchedUsers = await adminApi.getUsers(token!);
-      setUsers(fetchedUsers);
-    } catch (err) {
-      setError("მომხმარებლების ჩატვირთვა ვერ მოხერხდა");
-      toast.error("მომხმარებლების ჩატვირთვა ვერ მოხერხდა");
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const filterUsers = () => {
+  const filteredUsers = useMemo(() => {
     let filtered = users;
 
     // Search filter
@@ -145,20 +152,37 @@ export default function UserManagementPage() {
     }
 
     // Role filter
-    if (roleFilter !== "all") {
+    if (roleFilter !== ROLE_FILTER.ALL) {
       filtered = filtered.filter(user => user.role === roleFilter);
     }
 
     // Status filter
-    if (statusFilter !== "all") {
-      if (statusFilter === "active") {
-        filtered = filtered.filter(user => !user.isBlocked);
-      } else if (statusFilter === "blocked") {
+    if (statusFilter !== STATUS_FILTER.ALL) {
+      if (statusFilter === STATUS_FILTER.ACTIVE) {
+        filtered = filtered.filter(user => !user.isBlocked && !user.isPaused);
+      } else if (statusFilter === STATUS_FILTER.BLOCKED) {
         filtered = filtered.filter(user => user.isBlocked);
+      } else if (statusFilter === STATUS_FILTER.PAUSED) {
+        filtered = filtered.filter(user => user.isPaused);
       }
     }
 
-    setFilteredUsers(filtered);
+    return filtered;
+  }, [users, searchTerm, roleFilter, statusFilter]);
+
+  const fetchUsers = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const fetchedUsers = await adminApi.getUsers();
+      setUsers(fetchedUsers);
+    } catch (err) {
+      setError("მომხმარებლების ჩატვირთვა ვერ მოხერხდა");
+      toast.error("მომხმარებლების ჩატვირთვა ვერ მოხერხდა");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleCreateUser = async () => {
@@ -171,7 +195,7 @@ export default function UserManagementPage() {
 
     try {
       // Note: You'll need to add this endpoint to your API
-      await adminApi.createUser(newUser, token);
+      await adminApi.createUser(newUser);
       await fetchUsers();
       setIsCreateDialogOpen(false);
       setNewUser({ email: "", name: "", password: "", role: "USER" });
@@ -185,7 +209,7 @@ export default function UserManagementPage() {
   const handleRoleChange = async (userId: string, role: "USER" | "ADMIN") => {
     if (!token) return;
     try {
-      await adminApi.updateUserRole(userId, role, token);
+      await adminApi.updateUserRole(userId, role);
       setUsers(users.map(u => (u.id === userId ? { ...u, role } : u)));
       toast.success(`მომხმარებლის როლი ${role === "ADMIN" ? "ადმინად" : "მომხმარებლად"} შეიცვალა`);
     } catch (err) {
@@ -194,64 +218,102 @@ export default function UserManagementPage() {
     }
   };
 
-  const handleDeleteUser = async (userId: string) => {
-    if (!token) return;
-    if (user?.id?.toString() === userId) {
+  const handleDeleteUser = async () => {
+    if (!token || !selectedUser) return;
+    if (user?.id?.toString() === selectedUser.id) {
       toast.error("საკუთარი ანგარიშის წაშლა შეუძლებელია");
       return;
     }
 
-    if (!confirm("დარწმუნებული ხართ მომხმარებლის წაშლაში?")) {
-      return;
-    }
-
     try {
-      await adminApi.deleteUser(userId, token);
-      setUsers(users.filter(u => u.id !== userId));
+      await adminApi.deleteUser(selectedUser.id);
+      setUsers(users.filter(u => u.id !== selectedUser.id));
       toast.success("მომხმარებელი წარმატებით წაიშალა");
     } catch (err) {
       toast.error("მომხმარებლის წაშლა ვერ მოხერხდა");
       console.error(err);
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setSelectedUser(null);
     }
   };
 
-  const handleBlockToggle = async (userId: string, blocked: boolean) => {
+  const handleUserStatusUpdate = async (
+    userId: string,
+    status: "block" | "unblock" | "pause" | "unpause"
+  ) => {
     if (!token) return;
     try {
-      if (blocked) {
-        await adminApi.unblockUser(userId, token);
-      } else {
-        await adminApi.blockUser(userId, token);
+      let updatedState: Partial<ApiUser> = {};
+
+      switch (status) {
+        case "block":
+          await adminApi.blockUser(userId);
+          updatedState = { isBlocked: true };
+          break;
+        case "unblock":
+          await adminApi.unblockUser(userId);
+          updatedState = { isBlocked: false };
+          break;
+        case "pause":
+          await adminApi.pauseUser(userId);
+          updatedState = { isPaused: true };
+          break;
+        case "unpause":
+          await adminApi.unpauseUser(userId);
+          updatedState = { isPaused: false };
+          break;
       }
-      setUsers(users.map(u => (u.id === userId ? { ...u, isBlocked: !blocked } : u)));
-      toast.success(blocked ? "მომხმარებელი განიბლოკა" : "მომხმარებელი დაიბლოკა");
+      setUsers(users.map(u => (u.id === userId ? { ...u, ...updatedState } : u)));
+      toast.success("ოპერაცია წარმატებით შესრულდა");
     } catch (err) {
       toast.error("ოპერაცია ვერ შესრულდა");
       console.error(err);
     }
   };
 
-  const handleResetPassword = async (userId: string) => {
-    if (!token) return;
-    const newPassword = prompt('შეიყვანეთ ახალი პაროლი:');
-    if (!newPassword) return;
+  const handleResetPassword = async () => {
+    if (!token || !selectedUser || !newPassword) {
+      toast.error("ახალი პაროლი სავალდებულოა");
+      return;
+    };
     
     try {
-      await adminApi.resetPassword(userId, newPassword, token);
+      await adminApi.resetPassword(selectedUser.id, newPassword);
       toast.success('პაროლი წარმატებით შეიცვალა');
     } catch {
       toast.error('პაროლის შეცვლა ვერ მოხერხდა');
+    } finally {
+      setIsResetPasswordDialogOpen(false);
+      setSelectedUser(null);
+      setNewPassword("");
     }
+  };
+
+  const openDeleteDialog = (user: ApiUser) => {
+    setSelectedUser(user);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const openResetPasswordDialog = (user: ApiUser) => {
+    setSelectedUser(user);
+    setIsResetPasswordDialogOpen(true);
   };
 
   const getRoleVariant = (role: string) => {
     return role === "ADMIN" ? "destructive" : "secondary";
   };
-
-  const getStatusVariant = (isBlocked: boolean) => {
-    return isBlocked ? "destructive" : "default";
+  const getStatusVariant = (user: ApiUser) => {
+    if (user.isBlocked) return "destructive";
+    if (user.isPaused) return "secondary";
+    return "default";
   };
 
+  const getStatusText = (user: ApiUser) => {
+    if (user.isBlocked) return "დაბლოკილი";
+    if (user.isPaused) return "შეჩერებული";
+    return "აქტიური";
+  };
   if (isLoading) {
     return <LoadingSpinner />;
   }
@@ -259,46 +321,14 @@ export default function UserManagementPage() {
   if (error) {
     return <div className="text-red-500 text-center mt-10">{error}</div>;
   }
-
-  if (user?.role?.toLowerCase() !== "admin") {
-    return (
-      <div className="text-center mt-10">
-        <p>ამ გვერდის ნახვის უფლება არ გაქვთ</p>
-        <Button onClick={() => router.push("/admin/login")} className="mt-4">
-          ადმინ პანელი
-        </Button>
-      </div>
-    );
-  }
-
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">👥 მომხმარებლების მართვა</h1>
-          <p className="text-gray-600 mt-1">სისტემის მომხმარებლების მმართველი პანელი</p>
-        </div>        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push('/admin/activity')}>
-            📊 აქტივობა
-          </Button>
-          <Button variant="outline" onClick={() => router.push('/admin/dashboard')}>
-            📊 დაშბორდი
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => {
-              clearAuth();
-              router.push('/admin/login');
-            }}
-          >
-            გამოსვლა
-          </Button>
-        </div>
-      </div>
-
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <AdminLayout 
+      title="მომხმარებლების მართვა" 
+      description="სისტემის მომხმარებლების მმართველი პანელი"
+      icon={<Users className="h-6 w-6 text-blue-600" />}
+    >
+      <div className="space-y-6">{/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card className="bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -331,6 +361,18 @@ export default function UserManagementPage() {
                 <p className="text-3xl font-bold text-green-900">{userStats.active}</p>
               </div>
               <UserCheck className="h-8 w-8 text-green-600" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-r from-yellow-50 to-yellow-100 border-yellow-200">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-yellow-600 text-sm font-medium">შეჩერებული</p>
+                <p className="text-3xl font-bold text-yellow-900">{userStats.paused}</p>
+              </div>
+              <Pause className="h-8 w-8 text-yellow-600" />
             </div>
           </CardContent>
         </Card>
@@ -368,9 +410,9 @@ export default function UserManagementPage() {
                   <SelectValue placeholder="როლი" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">ყველა როლი</SelectItem>
-                  <SelectItem value="ADMIN">ადმინი</SelectItem>
-                  <SelectItem value="USER">მომხმარებელი</SelectItem>
+                  <SelectItem value={ROLE_FILTER.ALL}>ყველა როლი</SelectItem>
+                  <SelectItem value={ROLE_FILTER.ADMIN}>ადმინი</SelectItem>
+                  <SelectItem value={ROLE_FILTER.USER}>მომხმარებელი</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -379,18 +421,19 @@ export default function UserManagementPage() {
                   <SelectValue placeholder="სტატუსი" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">ყველა სტატუსი</SelectItem>
-                  <SelectItem value="active">აქტიური</SelectItem>
-                  <SelectItem value="blocked">დაბლოკილი</SelectItem>
+                  <SelectItem value={STATUS_FILTER.ALL}>ყველა სტატუსი</SelectItem>
+                  <SelectItem value={STATUS_FILTER.ACTIVE}>აქტიური</SelectItem>
+                  <SelectItem value={STATUS_FILTER.PAUSED}>შეჩერებული</SelectItem>
+                  <SelectItem value={STATUS_FILTER.BLOCKED}>დაბლოკილი</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="flex gap-2">
-              <Button variant="outline" size="sm">
+              {/* <Button variant="outline" size="sm">
                 <Download className="h-4 w-4 mr-2" />
                 ექსპორტი
-              </Button>
+              </Button> */}
               
               <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                 <DialogTrigger asChild>
@@ -428,13 +471,24 @@ export default function UserManagementPage() {
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="password">პაროლი</Label>
-                      <Input
-                        id="password"
-                        type="password"
-                        value={newUser.password}
-                        onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                        placeholder="პაროლი"
-                      />
+                      <div className="relative">
+                        <Input
+                          id="password"
+                          type={showNewUserPassword ? "text" : "password"}
+                          value={newUser.password}
+                          onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                          placeholder="პაროლი"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500"
+                          onClick={() => setShowNewUserPassword(!showNewUserPassword)}
+                        >
+                          {showNewUserPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="role">როლი</Label>
@@ -470,8 +524,7 @@ export default function UserManagementPage() {
             მომხმარებლების სია ({filteredUsers.length})
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
+        <CardContent>          <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>მომხმარებელი</TableHead>
@@ -509,8 +562,8 @@ export default function UserManagementPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={getStatusVariant(!!u.isBlocked)}>
-                      {u.isBlocked ? "დაბლოკილი" : "აქტიური"}
+                    <Badge variant={getStatusVariant(u)}>
+                      {getStatusText(u)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm text-gray-500">
@@ -525,15 +578,16 @@ export default function UserManagementPage() {
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                           <MoreVertical className="h-4 w-4" />
                         </Button>
-                      </DropdownMenuTrigger>                      <DropdownMenuContent align="end" className="w-48">
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem onClick={() => router.push(`/admin/users/${u.id}`)}>
                           <Eye className="h-4 w-4 mr-2" />
                           დეტალების ნახვა
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => {}}>
+                        {/* <DropdownMenuItem onClick={() => {}}>
                           <Edit className="h-4 w-4 mr-2" />
                           რედაქტირება
-                        </DropdownMenuItem>
+                        </DropdownMenuItem> */}
                         <DropdownMenuItem
                           onClick={() => handleRoleChange(u.id, u.role === "ADMIN" ? "USER" : "ADMIN")}
                         >
@@ -541,11 +595,11 @@ export default function UserManagementPage() {
                           როლის შეცვლა ({u.role === "ADMIN" ? "მომხმარებელი" : "ადმინი"})
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => handleResetPassword(u.id)}>
+                        <DropdownMenuItem onClick={() => openResetPasswordDialog(u)}>
                           <Key className="h-4 w-4 mr-2" />
                           პაროლის რესეტი
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleBlockToggle(u.id, !!u.isBlocked)}>
+                        <DropdownMenuItem onClick={() => handleUserStatusUpdate(u.id, u.isBlocked ? "unblock" : "block")}>
                           {u.isBlocked ? (
                             <>
                               <UserCheck className="h-4 w-4 mr-2" />
@@ -558,9 +612,22 @@ export default function UserManagementPage() {
                             </>
                           )}
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleUserStatusUpdate(u.id, u.isPaused ? "unpause" : "pause")}>
+                          {u.isPaused ? (
+                            <>
+                              <Play className="h-4 w-4 mr-2" />
+                              გააქტიურება
+                            </>
+                          ) : (
+                            <>
+                              <Pause className="h-4 w-4 mr-2" />
+                              შეჩერება
+                            </>
+                          )}
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem 
-                          onClick={() => handleDeleteUser(u.id)} 
+                          onClick={() => openDeleteDialog(u)} 
                           className="text-red-600 focus:text-red-600"
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
@@ -583,5 +650,60 @@ export default function UserManagementPage() {
         </CardContent>
       </Card>
     </div>
+    {/* Delete Confirmation Dialog */}
+    <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>დარწმუნებული ხართ?</DialogTitle>
+          <DialogDescription>
+            მომხმარებლის "{selectedUser?.name || selectedUser?.email}" წაშლა. ამ ქმედების გაუქმება შეუძლებელია.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>გაუქმება</Button>
+          <Button variant="destructive" onClick={handleDeleteUser}>წაშლა</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Reset Password Dialog */}
+    <Dialog open={isResetPasswordDialogOpen} onOpenChange={setIsResetPasswordDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>პაროლის შეცვლა</DialogTitle>
+                <DialogDescription>
+                    შეიყვანეთ ახალი პაროლი მომხმარებლისთვის "{selectedUser?.name || selectedUser?.email}".
+                </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                    <Label htmlFor="new-password">ახალი პაროლი</Label>
+                    <div className="relative">
+                      <Input
+                          id="new-password"
+                          type={showPassword ? "text" : "password"}
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="********"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsResetPasswordDialogOpen(false)}>გაუქმება</Button>
+                <Button onClick={handleResetPassword}>შენახვა</Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+    </AdminLayout>
   );
 }

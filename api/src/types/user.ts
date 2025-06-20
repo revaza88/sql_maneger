@@ -7,6 +7,7 @@ export interface User {
   sqlServerUsername?: string;
   sqlServerPassword?: string;
   isBlocked?: boolean;
+  isPaused?: boolean; // Added paused status
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,6 +20,7 @@ export interface UserCreate {
   sqlServerUsername?: string;
   sqlServerPassword?: string;
   isBlocked?: boolean;
+  isPaused?: boolean; // Added paused status
 }
 
 export interface UserProfileUpdate {

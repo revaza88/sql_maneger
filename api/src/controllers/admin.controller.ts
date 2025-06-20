@@ -6,6 +6,7 @@ import { NotificationModel } from '../models/notification.model';
 import { RoleModel } from '../models/role.model';
 import { UserDatabaseModel } from '../models/user-database.model';
 import { UserDatabaseService } from '../services/UserDatabaseService';
+import { pool } from '../database/connection';
 import os from 'os';
 
 export class AdminController {
@@ -92,6 +93,34 @@ export class AdminController {
     }
   };
 
+  public pauseUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { userId } = req.params;
+      const success = await UserModel.setPaused(parseInt(userId, 10), true);
+      if (success) {
+        res.json({ status: 'success', message: 'User paused' });
+      } else {
+        res.status(404).json({ status: 'error', message: 'User not found' });
+      }
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public unpauseUser = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { userId } = req.params;
+      const success = await UserModel.setPaused(parseInt(userId, 10), false);
+      if (success) {
+        res.json({ status: 'success', message: 'User unpaused' });
+      } else {
+        res.status(404).json({ status: 'error', message: 'User not found' });
+      }
+    } catch (error) {
+      next(error);
+    }
+  };
+
   public resetPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { userId } = req.params;
@@ -115,7 +144,8 @@ export class AdminController {
     try {
       const totalUsers = await UserModel.countAll();
       const blockedUsers = await UserModel.countBlocked();
-      const activeUsers = totalUsers - blockedUsers;
+      const pausedUsers = await UserModel.countPaused();
+      const activeUsers = totalUsers - blockedUsers - pausedUsers;
       
       // Get database statistics
       const databases = await UserDatabaseModel.getAllDatabasesWithOwners();
@@ -130,6 +160,7 @@ export class AdminController {
           total: totalUsers,
           active: activeUsers,
           blocked: blockedUsers,
+          paused: pausedUsers,
           activePercentage: totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0
         },
         databases: {
@@ -145,6 +176,35 @@ export class AdminController {
       
       res.json({ status: 'success', data: stats });
     } catch (error) {
+      next(error);
+    }
+  };
+
+  public runMigration = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const migrationSQL = `
+        -- Add the isPaused column if it doesn't exist
+        IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.COLUMNS 
+                       WHERE TABLE_NAME = 'Users' AND COLUMN_NAME = 'isPaused')
+        BEGIN
+            ALTER TABLE Users 
+            ADD isPaused BIT NOT NULL DEFAULT 0;
+        END
+        
+        -- Update any existing users to have isPaused = 0 by default
+        UPDATE Users 
+        SET isPaused = 0 
+        WHERE isPaused IS NULL;
+      `;
+      
+      await pool.request().query(migrationSQL);
+      
+      res.json({ 
+        status: 'success', 
+        message: 'Database migration completed successfully. isPaused column added to Users table.' 
+      });
+    } catch (error) {
+      console.error('Migration error:', error);
       next(error);
     }
   };

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { adminApi } from "../../../lib/api";
+import { useEffect, useState, useMemo } from "react";
+import { adminApi } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/loading-spinner";
+import { AdminLayout } from "@/components/admin-layout";
 import {
   Activity,
   Search,
@@ -76,7 +77,7 @@ interface SystemStats {
   successfulActions: number;
   failedActions: number;
   uniqueUsers: number;
-  topActions: Array<{ action: string; count: number }>;
+  topActions: Array<{ action: string; count: number }> ;
 }
 
 export default function ActivityMonitoringPage() {
@@ -89,29 +90,34 @@ export default function ActivityMonitoringPage() {
   const [actionFilter, setActionFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const { user, token } = useAuthStore();
+  const { token } = useAuthStore();
   const router = useRouter();
 
   useEffect(() => {
-    if (!token || user?.role?.toLowerCase() !== "admin") {
-      router.push("/admin/login");
-      return;
+    if (token) {
+      fetchData();
     }
-    fetchData();
-  }, [token, user, router]);
+  }, [token]);
 
   const fetchData = async () => {
     setIsLoading(true);
     try {
       const [auditData, loginData, statsData] = await Promise.all([
-        adminApi.getAuditLogs(token!),
-        adminApi.getLoginHistory(token!),
-        adminApi.getSystemStats(token!),
+        adminApi.getAuditLogs(),
+        adminApi.getLoginHistory(),
+        adminApi.getSystemStats(),
       ]);
       
       setAuditLogs(auditData || []);
       setLoginHistory(loginData || []);
-      setSystemStats(statsData || null);
+      setSystemStats(statsData || {
+        totalActions: 0,
+        todayActions: 0,
+        successfulActions: 0,
+        failedActions: 0,
+        uniqueUsers: 0,
+        topActions: [],
+      });
     } catch (err) {
       toast.error("მონაცემების ჩატვირთვა ვერ მოხერხდა");
       console.error(err);
@@ -148,47 +154,49 @@ export default function ActivityMonitoringPage() {
     return "outline";
   };
 
-  const filteredAuditLogs = auditLogs.filter(log => {
+  const filteredAuditLogs = useMemo(() => auditLogs.filter(log => {
+    const searchTermLower = searchTerm.toLowerCase();
     const matchesSearch = searchTerm === "" || 
-      log.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.details.toLowerCase().includes(searchTerm.toLowerCase());
+      log.userEmail.toLowerCase().includes(searchTermLower) ||
+      log.action.toLowerCase().includes(searchTermLower) ||
+      log.details.toLowerCase().includes(searchTermLower);
     
     const matchesAction = actionFilter === "all" || log.action.toLowerCase().includes(actionFilter.toLowerCase());
     const matchesStatus = statusFilter === "all" || log.status === statusFilter;
     
     return matchesSearch && matchesAction && matchesStatus;
-  });
+  }), [auditLogs, searchTerm, actionFilter, statusFilter]);
 
-  const filteredLoginHistory = loginHistory.filter(login => {
+  const filteredLoginHistory = useMemo(() => loginHistory.filter(login => {
+    const searchTermLower = searchTerm.toLowerCase();
     const matchesSearch = searchTerm === "" || 
-      login.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      login.ipAddress.includes(searchTerm);
+      login.userEmail.toLowerCase().includes(searchTermLower) ||
+      login.ipAddress.includes(searchTermLower);
     
     return matchesSearch;
-  });
+  }), [loginHistory, searchTerm]);
 
   if (isLoading) {
-    return <LoadingSpinner />;
+    return (
+      <AdminLayout 
+        title="სისტემის აქტივობა" 
+        description="მომხმარებლების ქმედებების და შესვლების მონიტორინგი"
+        icon={<Activity className="h-6 w-6 text-blue-600" />}
+      >
+        <div className="flex items-center justify-center h-64">
+          <LoadingSpinner />
+        </div>
+      </AdminLayout>
+    );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">📊 სისტემის აქტივობა</h1>
-          <p className="text-gray-600 mt-1">მომხმარებლების ქმედებების და შესვლების მონიტორინგი</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push('/admin/users')}>
-            👥 მომხმარებლები
-          </Button>
-          <Button variant="outline" onClick={() => router.push('/admin/dashboard')}>
-            📊 დაშბორდი
-          </Button>
-        </div>
-      </div>
+    <AdminLayout 
+      title="სისტემის აქტივობა" 
+      description="მომხმარებლების ქმედებების და შესვლების მონიტორინგი"
+      icon={<Activity className="h-6 w-6 text-blue-600" />}
+    >
+      <div className="space-y-6">
 
       {/* Statistics */}
       {systemStats && (
@@ -248,7 +256,7 @@ export default function ActivityMonitoringPage() {
                   <p className="text-purple-600 text-sm font-medium">აქტიური მომხმარებლები</p>
                   <p className="text-3xl font-bold text-purple-900">{systemStats.uniqueUsers}</p>
                 </div>
-                <User className="h-8 w-8 text-purple-600" />
+                <Users className="h-8 w-8 text-purple-600" />
               </div>
             </CardContent>
           </Card>
@@ -327,10 +335,10 @@ export default function ActivityMonitoringPage() {
                 <RefreshCw className="h-4 w-4 mr-2" />
                 განახლება
               </Button>
-              <Button variant="outline" size="sm">
+              {/* <Button variant="outline" size="sm">
                 <Download className="h-4 w-4 mr-2" />
                 ექსპორტი
-              </Button>
+              </Button> */}
             </div>
           </div>
         </CardContent>
@@ -385,7 +393,7 @@ export default function ActivityMonitoringPage() {
                       <div>
                         <span className="text-gray-600">{log.resourceType}</span>
                         {log.resourceId && (
-                          <div className="text-xs text-gray-400">{log.resourceId}</div>
+                          <div className="text-xs text-gray-400 truncate max-w-[100px]">{log.resourceId}</div>
                         )}
                       </div>
                     </TableCell>
@@ -459,7 +467,7 @@ export default function ActivityMonitoringPage() {
                     <TableCell className="text-sm text-gray-600">
                       {login.ipAddress}
                     </TableCell>
-                    <TableCell className="text-sm text-gray-600 max-w-xs truncate">
+                    <TableCell className="text-sm text-gray-600 max-w-xs truncate" title={login.userAgent}>
                       {login.userAgent}
                     </TableCell>
                     <TableCell className="text-sm text-gray-600">
@@ -476,9 +484,9 @@ export default function ActivityMonitoringPage() {
                 <p>შესვლების ისტორია ვერ მოიძებნა</p>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </CardContent>        </Card>
       )}
     </div>
+    </AdminLayout>
   );
 }

@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { LoadingSpinner } from "@/components/loading-spinner";
+import { AdminLayout } from "@/components/admin-layout";
 import {
   User,
   Mail,
@@ -26,6 +27,8 @@ import {
   Trash2,
   UserX,
   UserCheck,
+  Pause,
+  Play,
 } from "lucide-react";
 
 interface UserActivity {
@@ -70,7 +73,7 @@ export default function UserDetailPage() {
     try {
       // In a real app, you'd have a specific API endpoint for user details
       // For now, we'll simulate this with mock data
-      const users = await adminApi.getUsers(token!);
+      const users = await adminApi.getUsers();
       const foundUser = users.find(u => u.id === userId);
       
       if (!foundUser) {
@@ -134,7 +137,7 @@ export default function UserDetailPage() {
   const handleRoleChange = async (newRole: "USER" | "ADMIN") => {
     if (!token || !user) return;
     try {
-      await adminApi.updateUserRole(user.id, newRole, token);
+      await adminApi.updateUserRole(user.id, newRole);
       setUser({ ...user, role: newRole });
       toast.success(`მომხმარებლის როლი ${newRole === "ADMIN" ? "ადმინად" : "მომხმარებლად"} შეიცვალა`);
     } catch (err) {
@@ -147,12 +150,28 @@ export default function UserDetailPage() {
     if (!token || !user) return;
     try {
       if (user.isBlocked) {
-        await adminApi.unblockUser(user.id, token);
+        await adminApi.unblockUser(user.id);
       } else {
-        await adminApi.blockUser(user.id, token);
+        await adminApi.blockUser(user.id);
       }
       setUser({ ...user, isBlocked: !user.isBlocked });
       toast.success(user.isBlocked ? "მომხმარებელი განიბლოკა" : "მომხმარებელი დაიბლოკა");
+    } catch (err) {
+      toast.error("ოპერაცია ვერ შესრულდა");
+      console.error(err);
+    }
+  };
+
+  const handlePauseToggle = async () => {
+    if (!token || !user) return;
+    try {
+      if (user.isPaused) {
+        await adminApi.unpauseUser(user.id);
+      } else {
+        await adminApi.pauseUser(user.id);
+      }
+      setUser({ ...user, isPaused: !user.isPaused });
+      toast.success(user.isPaused ? "მომხმარებელი აღდგა" : "მომხმარებელი შეჩერდა");
     } catch (err) {
       toast.error("ოპერაცია ვერ შესრულდა");
       console.error(err);
@@ -171,7 +190,7 @@ export default function UserDetailPage() {
     }
 
     try {
-      await adminApi.deleteUser(user.id, token);
+      await adminApi.deleteUser(user.id);
       toast.success("მომხმარებელი წარმატებით წაიშალა");
       router.push('/admin/users');
     } catch (err) {
@@ -205,14 +224,25 @@ export default function UserDetailPage() {
         return 'outline';
     }
   };
-
   if (isLoading) {
-    return <LoadingSpinner />;
+    return (
+      <AdminLayout 
+        title="მომხმარებლის დეტალები" 
+        description="მომხმარებლის სრული ინფორმაცია და აქტივობა"
+        icon={<User className="h-6 w-6 text-blue-600" />}
+      >
+        <LoadingSpinner />
+      </AdminLayout>
+    );
   }
 
   if (error || !user) {
     return (
-      <div className="container mx-auto py-6">
+      <AdminLayout 
+        title="მომხმარებლის დეტალები" 
+        description="მომხმარებლის სრული ინფორმაცია და აქტივობა"
+        icon={<User className="h-6 w-6 text-blue-600" />}
+      >
         <div className="text-center py-12">
           <User className="h-16 w-16 mx-auto mb-4 text-gray-300" />
           <h2 className="text-2xl font-bold text-gray-900 mb-2">მომხმარებელი ვერ მოიძებნა</h2>
@@ -222,33 +252,23 @@ export default function UserDetailPage() {
             უკან დაბრუნება
           </Button>
         </div>
-      </div>
+      </AdminLayout>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
+    <AdminLayout 
+      title={`მომხმარებელი: ${user.name || user.email}`} 
+      description="მომხმარებლის სრული ინფორმაცია და აქტივობა"
+      icon={<User className="h-6 w-6 text-blue-600" />}
+    >      <div className="space-y-6">
+        {/* Back Button */}
+        <div className="flex items-center">
           <Button variant="outline" onClick={() => router.push('/admin/users')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             უკან
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">👤 მომხმარებლის დეტალები</h1>
-            <p className="text-gray-600 mt-1">{user.email}</p>
-          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push('/admin/activity')}>
-            📊 აქტივობა
-          </Button>
-          <Button variant="outline" onClick={() => router.push('/admin/dashboard')}>
-            📊 დაშბორდი
-          </Button>
-        </div>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* User Profile Card */}
@@ -276,12 +296,23 @@ export default function UserDetailPage() {
                   <span className="text-gray-600">ელ. ფოსტა:</span>
                   <span className="font-medium">{user.email}</span>
                 </div>
-                
-                <div className="flex items-center space-x-3 text-sm">
+                  <div className="flex items-center space-x-3 text-sm">
                   <Shield className="h-4 w-4 text-gray-400" />
                   <span className="text-gray-600">როლი:</span>
                   <Badge variant={user.role === "ADMIN" ? "destructive" : "secondary"}>
                     {user.role === "ADMIN" ? "ადმინისტრატორი" : "მომხმარებელი"}
+                  </Badge>
+                </div>
+
+                <div className="flex items-center space-x-3 text-sm">
+                  <Activity className="h-4 w-4 text-gray-400" />
+                  <span className="text-gray-600">სტატუსი:</span>
+                  <Badge variant={
+                    user.isBlocked ? "destructive" : 
+                    user.isPaused ? "secondary" : "default"
+                  }>
+                    {user.isBlocked ? "დაბლოკილი" : 
+                     user.isPaused ? "შეჩერებული" : "აქტიური"}
                   </Badge>
                 </div>
 
@@ -339,6 +370,22 @@ export default function UserDetailPage() {
                     <>
                       <UserX className="h-4 w-4 mr-2" />
                       დაბლოკვა
+                    </>
+                  )}
+                </Button>                <Button
+                  onClick={handlePauseToggle}
+                  variant={user.isPaused ? "default" : "secondary"}
+                  className="w-full"
+                >
+                  {user.isPaused ? (
+                    <>
+                      <Play className="h-4 w-4 mr-2" />
+                      აღდგენა
+                    </>
+                  ) : (
+                    <>
+                      <Pause className="h-4 w-4 mr-2" />
+                      შეჩერება
                     </>
                   )}
                 </Button>
@@ -430,9 +477,9 @@ export default function UserDetailPage() {
                 </div>
               )}
             </CardContent>
-          </Card>
-        </div>
+          </Card>        </div>
       </div>
     </div>
+    </AdminLayout>
   );
 }

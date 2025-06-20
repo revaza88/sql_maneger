@@ -29,6 +29,7 @@ import { sqlServerConfigApi } from "@/lib/api";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/loading-spinner";
+import { AdminLayout } from "@/components/admin-layout";
 
 // SQL Server კონფიგურაციის სქემა
 const sqlServerSchema = z.object({
@@ -171,23 +172,18 @@ export default function SqlServerManagePage() {
       default:
         return <Badge variant="outline">Unknown</Badge>;
     }  };
-
   // Show loading if user is not authenticated or not admin
   if (!token || !user || user.role?.toLowerCase() !== 'admin') {
     return <LoadingSpinner />;
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">SQL Server Management</h1>
-          <p className="text-muted-foreground mt-2">
-            Configure and manage SQL Server connections for the application
-          </p>
-        </div>
-        <Server className="h-8 w-8 text-muted-foreground" />
-      </div>
+    <AdminLayout 
+      title="SQL Server Management" 
+      description="Configure and manage SQL Server connections for the application"
+      icon={<Settings className="h-6 w-6 text-blue-600" />}
+    >
+      <div className="space-y-8">
 
       {/* ახალი კავშირის ფორმა */}
       <Card>
@@ -417,9 +413,9 @@ export default function SqlServerManagePage() {
                 </div>
               ))}
             </div>
-          )}
-        </CardContent>
+          )}        </CardContent>
       </Card>
     </div>
+    </AdminLayout>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,14 +8,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Trash2, Database, Download, Plus, Search, RefreshCw } from 'lucide-react';
+import { Trash2, Database, Download, Plus, Search, RefreshCw, Archive, Play, AlertTriangle, FileText, HardDrive } from 'lucide-react';
 import { backupApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useRouter } from 'next/navigation';
 import { LoadingSpinner } from '@/components/loading-spinner';
+import { AdminLayout } from '@/components/admin-layout';
 
 interface BackupConfig {
   id: string;
@@ -82,19 +83,22 @@ export default function BackupManagement() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isRestoreDialogOpen, setIsRestoreDialogOpen] = useState(false);
   const [isBatchDetailsDialogOpen, setIsBatchDetailsDialogOpen] = useState(false);
+  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
+  const [confirmDialogContent, setConfirmDialogContent] = useState({ title: '', description: '', onConfirm: () => {} });
+
   const [selectedBackupFile, setSelectedBackupFile] = useState<BackupFile | null>(null);
   const [batchBackupInProgress, setBatchBackupInProgress] = useState(false);
   
-  const { user, token, clearAuth } = useAuthStore();
+  const { token } = useAuthStore();
   const router = useRouter();
 
   // Authorization check
   useEffect(() => {
-    if (!token || !user || user.role?.toLowerCase() !== 'admin') {
+    if (!token) {
       router.push('/admin/login');
       return;
     }
-  }, [token, user, router]);
+  }, [token, router]);
 
   // Form states
   const [newConfig, setNewConfig] = useState({
@@ -111,20 +115,11 @@ export default function BackupManagement() {
   });
 
   useEffect(() => {
-    if (user?.role?.toLowerCase() === 'admin') {
+    if (token) {
       loadData();
     }
-  }, [user]);
+  }, [token]);
 
-  useEffect(() => {
-    // Debug auth state
-    const authState = useAuthStore.getState();
-    console.log('Current auth state:', { 
-      user: authState.user,
-      hasToken: !!authState.token,
-      userRole: authState.user?.role 
-    });
-  }, []);
   const loadData = async () => {
     try {
       setLoading(true);
@@ -135,10 +130,10 @@ export default function BackupManagement() {
         backupApi.getBatchBackups()
       ]);
 
-      setBackupConfigs(configsRes);
-      setBackupFiles(filesRes);
-      setDatabases(databasesRes);
-      setBatchBackups(batchBackupsRes);
+      setBackupConfigs(configsRes || []);
+      setBackupFiles(filesRes || []);
+      setDatabases(databasesRes || []);
+      setBatchBackups(batchBackupsRes || []);
     } catch (error) {
       toast.error('მონაცემების ჩატვირთვის შეცდომა');
       console.error('Error loading data:', error);
@@ -146,6 +141,17 @@ export default function BackupManagement() {
       setLoading(false);
     }
   };
+
+  const openConfirmDialog = (title: string, description: string, onConfirm: () => void) => {
+    setConfirmDialogContent({ title, description, onConfirm });
+    setIsConfirmDialogOpen(true);
+  };
+
+  const handleConfirm = () => {
+    confirmDialogContent.onConfirm();
+    setIsConfirmDialogOpen(false);
+  };
+
   const createBackupConfig = async () => {
     try {
       console.log('Creating backup config with data:', newConfig);
@@ -170,34 +176,29 @@ export default function BackupManagement() {
   };
 
   // Batch backup functions
-  const createBatchBackup = async () => {
-    if (!confirm('ნამდვილად გსურთ ყველა ბაზის ბაჩ ბექაპის შექმნა?')) return;
-    
-    try {
-      setBatchBackupInProgress(true);
-      const result = await backupApi.createBatchBackup();
-      toast.success('ბაჩ ბექაპი დაიწყო');
-      console.log('Batch backup started:', result);
-      
-      // Reload data to show the new batch backup
-      setTimeout(() => {
-        loadData();
-      }, 2000);
-    } catch (error) {
-      toast.error('ბაჩ ბექაპის შექმნის შეცდომა');
-      console.error('Error creating batch backup:', error);
-    } finally {
-      setBatchBackupInProgress(false);
-    }
+  const createBatchBackup = () => {
+    openConfirmDialog('ყველა ბაზის ბექაპი', 'ნამდვილად გსურთ ყველა ბაზის ბაჩ ბექაპის შექმნა?', async () => {
+      try {
+        setBatchBackupInProgress(true);
+        const result = await backupApi.createBatchBackup();
+        toast.success('ბაჩ ბექაპი დაიწყო');
+        console.log('Batch backup started:', result);
+        
+        // Reload data to show the new batch backup
+        setTimeout(() => {
+          loadData();
+        }, 2000);
+      } catch (error) {
+        toast.error('ბაჩ ბექაპის შექმნის შეცდომა');
+        console.error('Error creating batch backup:', error);
+      } finally {
+        setBatchBackupInProgress(false);
+      }
+    });
   };
 
   const loadBatchDetails = async (batchId: string) => {
     try {
-      const details = await backupApi.getBatchBackupDetails(batchId);
-      setSelectedBatchDetails(details);
-      setIsBatchDetailsDialogOpen(true);
-    } catch (error) {
-      toast.error('ბაჩ ბექაპის დეტალების ჩატვირთვის შეცდომა');
       console.error('Error loading batch details:', error);
     }
   };
@@ -397,24 +398,30 @@ export default function BackupManagement() {
       setLoading(false);
     }
   };
-
   // Show loading if user is not authenticated or not admin
   if (!token || !user || user.role?.toLowerCase() !== 'admin') {
     return <LoadingSpinner />;
   }
 
   if (loading) {
-    return <div className="flex justify-center p-8">იტვირთება...</div>;
+    return (
+      <AdminLayout 
+        title="ბექაპების მართვა" 
+        description="მართეთ ავტომატური და ხელით ბექაპები"
+        icon={<Archive className="h-6 w-6 text-blue-600" />}
+      >
+        <div className="flex justify-center p-8">იტვირთება...</div>
+      </AdminLayout>
+    );
   }
+
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            ბექაპების მართვა
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">მართეთ ავტომატური და ხელით ბექაპები</p>
-        </div>        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+    <AdminLayout 
+      title="ბექაპების მართვა" 
+      description="მართეთ ავტომატური და ხელით ბექაპები"
+      icon={<Archive className="h-6 w-6 text-blue-600" />}
+    >
+      <div className="max-w-7xl mx-auto space-y-6"><Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader className="space-y-3">
               <DialogTitle className="flex items-center gap-2">
@@ -1278,8 +1285,7 @@ export default function BackupManagement() {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-    </div>
+        </DialogContent>      </Dialog>
+    </AdminLayout>
   );
 }

@@ -11,17 +11,32 @@ export const api = axios.create({
 
 // Add auth token to requests
 api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+  console.log(`Making API request to: ${config.url}`);
+  
+  // Get token from localStorage directly as a fallback for SSR issues
+  const authStorage = localStorage.getItem('auth-storage');
+  if (authStorage) {
+    try {
+      const parsed = JSON.parse(authStorage);
+      const token = parsed.state?.token;
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.warn('Failed to parse auth storage:', error);
+    }
   }
-  return config
-})
+  return config;
+});
 
 // Handle auth errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 429) {
+      console.error('Rate limit exceeded. Headers:', error.response.headers);
+      console.error('Request URL:', error.config?.url);
+    }
     if (error.response?.status === 401) {
       useAuthStore.getState().clearAuth()
       window.location.href = '/login'
@@ -177,6 +192,7 @@ export interface User {
   name?: string;
   role: "USER" | "ADMIN";
   isBlocked?: boolean;
+  isPaused?: boolean; // Added paused status
   lastLogin?: string; // Added lastLogin property
   createdAt?: string;
   updatedAt?: string;
@@ -184,76 +200,95 @@ export interface User {
 
 // Admin API
 export const adminApi = {
-  getUsers: async (token: string, params?: { page?: number; limit?: number; search?: string }): Promise<User[]> => {
-    const response = await api.get('/admin/users', {
-      headers: { Authorization: `Bearer ${token}` },
-      params,
-    });
+  getUsers: async (params?: { page?: number; limit?: number; search?: string }): Promise<User[]> => {
+    // Clean up params to avoid axios issues
+    const cleanParams = params && Object.keys(params).length > 0 ? 
+      Object.fromEntries(Object.entries(params).filter(([_, value]) => value !== undefined && value !== null)) : 
+      undefined;
+    
+    const response = await api.get('/admin/users', cleanParams ? { params: cleanParams } : {});
     return response.data.data;
   },
-  createUser: async (userData: { email: string; name: string; password: string; role: "USER" | "ADMIN" }, token: string): Promise<User> => {
-    const response = await api.post('/admin/users', userData, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  createUser: async (userData: { email: string; name: string; password: string; role: "USER" | "ADMIN" }): Promise<User> => {
+    const response = await api.post('/admin/users', userData);
     return response.data.data;
   },
-  updateUserRole: async (userId: string, role: "USER" | "ADMIN", token: string): Promise<User> => {
-    const response = await api.put(`/admin/users/${userId}/role`, { role }, { // Removed /api
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  updateUserRole: async (userId: string, role: "USER" | "ADMIN"): Promise<User> => {
+    const response = await api.put(`/admin/users/${userId}/role`, { role });
     return response.data.data;
   },
-  deleteUser: async (userId: string, token: string): Promise<void> => {
-    await api.delete(`/admin/users/${userId}`, { // Removed /api
-      headers: { Authorization: `Bearer ${token}` },
-    });
+  deleteUser: async (userId: string): Promise<void> => {
+    await api.delete(`/admin/users/${userId}`);
   },
-  blockUser: async (userId: string, token: string): Promise<void> => {
-    await api.put(`/admin/users/${userId}/block`, {}, { headers: { Authorization: `Bearer ${token}` } });
+  blockUser: async (userId: string): Promise<void> => {
+    await api.put(`/admin/users/${userId}/block`, {});
   },
-  unblockUser: async (userId: string, token: string): Promise<void> => {
-    await api.put(`/admin/users/${userId}/unblock`, {}, { headers: { Authorization: `Bearer ${token}` } });
+  unblockUser: async (userId: string): Promise<void> => {
+    await api.put(`/admin/users/${userId}/unblock`, {});
   },
-  resetPassword: async (userId: string, newPassword: string, token: string): Promise<void> => {
-    await api.put(`/admin/users/${userId}/password`, { newPassword }, { headers: { Authorization: `Bearer ${token}` } });
+  pauseUser: async (userId: string): Promise<void> => {
+    await api.put(`/admin/users/${userId}/pause`, {});
   },
-  getStats: async (token: string) => {
-    const response = await api.get('/admin/stats', { headers: { Authorization: `Bearer ${token}` } });
+  unpauseUser: async (userId: string): Promise<void> => {
+    await api.put(`/admin/users/${userId}/unpause`, {});
+  },
+  resetPassword: async (userId: string, newPassword: string): Promise<void> => {
+    await api.put(`/admin/users/${userId}/password`, { newPassword });
+  },
+  getStats: async () => {
+    const response = await api.get('/admin/stats');
     return response.data.data;
   },
-  getLoginHistory: async (token: string) => {
-    const response = await api.get('/admin/login-history', { headers: { Authorization: `Bearer ${token}` } });
+  getLoginHistory: async () => {
+    const response = await api.get('/admin/login-history');
     return response.data.data;
   },
-  getAuditLogs: async (token: string) => {
-    const response = await api.get('/admin/audit-logs', { headers: { Authorization: `Bearer ${token}` } });
+  getAuditLogs: async () => {
+    const response = await api.get('/admin/audit-logs');
     return response.data.data;
   },
-  listNotifications: async (token: string) => {
-    const response = await api.get('/admin/notifications', { headers: { Authorization: `Bearer ${token}` } });
+  listNotifications: async () => {
+    const response = await api.get('/admin/notifications');
     return response.data.data;
   },
-  createNotification: async (data: { message: string; type?: string; isActive?: boolean }, token: string) => {
-    const response = await api.post('/admin/notifications', data, { headers: { Authorization: `Bearer ${token}` } });
+  createNotification: async (data: { message: string; type?: string; isActive?: boolean }) => {
+    const response = await api.post('/admin/notifications', data);
     return response.data.data;
   },
-  updateNotification: async (id: number, data: { message: string; type?: string; isActive?: boolean }, token: string) => {
-    await api.put(`/admin/notifications/${id}`, data, { headers: { Authorization: `Bearer ${token}` } });
+  updateNotification: async (id: number, data: { message: string; type?: string; isActive?: boolean }) => {
+    await api.put(`/admin/notifications/${id}`, data);
   },
-  deleteNotification: async (id: number, token: string) => {
-    await api.delete(`/admin/notifications/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+  deleteNotification: async (id: number) => {
+    await api.delete(`/admin/notifications/${id}`);
   },
-  getSystemStats: async (token: string) => {
-    const response = await api.get('/admin/system-stats', { headers: { Authorization: `Bearer ${token}` } });
+  getSystemStats: async () => {
+    const response = await api.get('/admin/system-stats');
     return response.data.data;
   },
-  listRoles: async (token: string) => {
-    const response = await api.get('/admin/roles', { headers: { Authorization: `Bearer ${token}` } });
+  listRoles: async () => {
+    const response = await api.get('/admin/roles');
     return response.data.data;
   },
-  createRole: async (data: { name: string; description?: string }, token: string) => {
-    const response = await api.post('/admin/roles', data, { headers: { Authorization: `Bearer ${token}` } });
+  createRole: async (data: { name: string; description?: string }) => {
+    const response = await api.post('/admin/roles', data);
     return response.data.data;
+  },
+  // Database management methods
+  getDatabases: async () => {
+    const response = await api.get('/admin/databases');
+    return response.data;
+  },
+  createDatabase: async (data: { databaseName: string; userId: string; template?: string; collation?: string; initialSize?: number }) => {
+    const response = await api.post('/admin/databases', data);
+    return response.data;
+  },
+  deleteDatabase: async (databaseName: string) => {
+    const response = await api.delete(`/admin/databases/${encodeURIComponent(databaseName)}`);
+    return response.data;
+  },
+  backupDatabase: async (databaseName: string) => {
+    const response = await api.post(`/admin/databases/${encodeURIComponent(databaseName)}/backup`, {});
+    return response.data;
   },
 };
 
