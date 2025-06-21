@@ -678,7 +678,8 @@ export default function BackupManagement() {
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
-                      </TableCell>                    </TableRow>
+                      </TableCell>
+                    </TableRow>
                   ))}
                 </TableBody>
               </Table>
@@ -910,7 +911,9 @@ export default function BackupManagement() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>        <TabsContent value="batch">
+        </TabsContent>
+        
+        <TabsContent value="batch">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">

@@ -532,8 +532,7 @@ export default function UserManagementPage() {
                 <TableHead>ბოლო აქტივობა</TableHead>
                 <TableHead className="text-right">ქმედებები</TableHead>
               </TableRow>
-            </TableHeader>
-            <TableBody>
+            </TableHeader>            <TableBody>
               {filteredUsers.map((u) => (
                 <TableRow key={u.id} className="hover:bg-gray-50">
                   <TableCell>
@@ -552,18 +551,12 @@ export default function UserManagementPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant={getRoleVariant(u.role)} className="flex items-center gap-1 w-fit">
-                      {u.role === "ADMIN" ? (
-                        <Shield className="h-3 w-3" />
-                      ) : (
-                        <Users className="h-3 w-3" />
-                      )}
+                      {u.role === "ADMIN" ? <Shield className="h-3 w-3" /> : <Users className="h-3 w-3" />}
                       {u.role === "ADMIN" ? "ადმინი" : "მომხმარებელი"}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={getStatusVariant(u)}>
-                      {getStatusText(u)}
-                    </Badge>
+                    <Badge variant={getStatusVariant(u)}>{getStatusText(u)}</Badge>
                   </TableCell>
                   <TableCell className="text-sm text-gray-500">
                     <div className="flex items-center gap-1">
@@ -583,13 +576,7 @@ export default function UserManagementPage() {
                           <Eye className="h-4 w-4 mr-2" />
                           დეტალების ნახვა
                         </DropdownMenuItem>
-                        {/* <DropdownMenuItem onClick={() => {}}>
-                          <Edit className="h-4 w-4 mr-2" />
-                          რედაქტირება
-                        </DropdownMenuItem> */}
-                        <DropdownMenuItem
-                          onClick={() => handleRoleChange(u.id, u.role === "ADMIN" ? "USER" : "ADMIN")}
-                        >
+                        <DropdownMenuItem onClick={() => handleRoleChange(u.id, u.role === "ADMIN" ? "USER" : "ADMIN")}>
                           <Shield className="h-4 w-4 mr-2" />
                           როლის შეცვლა ({u.role === "ADMIN" ? "მომხმარებელი" : "ადმინი"})
                         </DropdownMenuItem>
@@ -625,10 +612,7 @@ export default function UserManagementPage() {
                           )}
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          onClick={() => openDeleteDialog(u)} 
-                          className="text-red-600 focus:text-red-600"
-                        >
+                        <DropdownMenuItem onClick={() => openDeleteDialog(u)} className="text-red-600 focus:text-red-600">
                           <Trash2 className="h-4 w-4 mr-2" />
                           წაშლა
                         </DropdownMenuItem>

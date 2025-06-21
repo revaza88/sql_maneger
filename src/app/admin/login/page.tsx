@@ -131,7 +131,9 @@ export default function AdminLoginPage() {
                 {isLoading ? 'Authenticating...' : 'Admin Login'}
               </Button>
             </form>
-          </Form>          <div className="mt-6 text-center text-sm space-y-2">
+          </Form>
+          
+          <div className="mt-6 text-center text-sm space-y-2">
             <div className="text-muted-foreground">
               Admin access only
             </div>
