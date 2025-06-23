@@ -5,7 +5,7 @@ import { DatabaseService } from './src/database/DatabaseService';
 async function createAdminUser() {
   try {
     console.log('Initializing database connection...');
-    await DatabaseService.initialize();
+    const databaseService = DatabaseService.getInstance();
     
     const adminEmail = 'admin@sqlmanager.com';
     const adminPassword = 'admin123';

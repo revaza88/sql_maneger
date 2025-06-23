@@ -521,9 +521,9 @@ export default function UserManagementPage() {
           <CardTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
             მომხმარებლების სია ({filteredUsers.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>          <Table>
+          </CardTitle>        </CardHeader>
+        <CardContent>
+          <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>მომხმარებელი</TableHead>
@@ -532,7 +532,8 @@ export default function UserManagementPage() {
                 <TableHead>ბოლო აქტივობა</TableHead>
                 <TableHead className="text-right">ქმედებები</TableHead>
               </TableRow>
-            </TableHeader>            <TableBody>
+            </TableHeader>
+            <TableBody>
               {filteredUsers.map((u) => (
                 <TableRow key={u.id} className="hover:bg-gray-50">
                   <TableCell>

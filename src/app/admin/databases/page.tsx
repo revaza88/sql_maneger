@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthWrapper } from "@/components/auth-wrapper";
 import { AdminLayout } from "@/components/admin-layout";
-import { adminApi } from "../../../lib/api";
+import { adminApi, databaseApi, backupApi } from "../../../lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -48,10 +48,10 @@ import {
   Search,
   Database,
   Plus,
-  MoreVertical,
-  Download,
+  MoreVertical,  Download,
   Trash2,
   Copy,
+  Edit,
   Activity,
   HardDrive,
   Users,
@@ -100,8 +100,6 @@ interface DatabaseStats {
   offline: number;
   totalSizeMB: number;
   averageSizeMB: number;
-  withBackups: number;
-  withoutBackups: number;
 }
 
 interface CreateDatabaseForm {
@@ -115,7 +113,6 @@ interface CreateDatabaseForm {
 const DatabaseManagementPage = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
   // State management
   const [databases, setDatabases] = useState<DatabaseInfo[]>([]);
   const [stats, setStats] = useState<DatabaseStats | null>(null);
@@ -125,11 +122,11 @@ const DatabaseManagementPage = () => {
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [isRealTimeEnabled, setIsRealTimeEnabled] = useState(false);
   const [alertCount, setAlertCount] = useState(0);
-  
-  // Dialog states
+    // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isCloneDialogOpen, setIsCloneDialogOpen] = useState(false);
+  const [isRenameDialogOpen, setIsRenameDialogOpen] = useState(false);
   const [selectedDatabase, setSelectedDatabase] = useState<DatabaseInfo | null>(null);
+  const [newDatabaseName, setNewDatabaseName] = useState("");
   
   // Form states
   const [createForm, setCreateForm] = useState<CreateDatabaseForm>({
@@ -139,10 +136,8 @@ const DatabaseManagementPage = () => {
     collation: 'SQL_Latin1_General_CP1_CI_AS',
     initialSize: 100
   });
-
-  // Check for URL parameters (backup integration)
+  // Check for URL parameters
   const highlightedDatabase = searchParams.get('database');
-  const action = searchParams.get('action');
 
   useEffect(() => {
     fetchDatabases();
@@ -171,15 +166,7 @@ const DatabaseManagementPage = () => {
     ).length;
     setAlertCount(alerts);
   }, [databases]);
-
-  useEffect(() => {
-    // Handle backup integration
-    if (action === 'backup' && highlightedDatabase) {
-      handleQuickBackup(highlightedDatabase);
-    } else if (action === 'restore' && highlightedDatabase) {
-      handleRestore(highlightedDatabase);
-    }
-  }, [action, highlightedDatabase]);  const fetchDatabases = async () => {
+const fetchDatabases = async () => {
     setIsLoading(true);
     try {
       const response = await adminApi.getDatabases();
@@ -218,25 +205,21 @@ const DatabaseManagementPage = () => {
     }
   };  const fetchStats = async () => {
     try {
-      const response = await adminApi.getStats();
-      
-      // API returns { status, data } where data contains the stats
-      const statsData = response.data || response;
-      
+      const statsResponse = await adminApi.getStats().catch(() => null);
+        // Database stats
+      const statsData = statsResponse?.data || statsResponse;
       const databaseStats: DatabaseStats = {
-        total: statsData.databases?.total || 0,
-        online: Math.floor((statsData.databases?.total || 0) * 0.9),
-        offline: Math.floor((statsData.databases?.total || 0) * 0.1),
-        totalSizeMB: statsData.databases?.totalSizeMB || 0,
-        averageSizeMB: statsData.databases?.averageSizeMB || 0,
-        withBackups: Math.floor((statsData.databases?.total || 0) * 0.7),
-        withoutBackups: Math.floor((statsData.databases?.total || 0) * 0.3)
+        total: statsData?.databases?.total || 0,
+        online: Math.floor((statsData?.databases?.total || 0) * 0.9),
+        offline: Math.floor((statsData?.databases?.total || 0) * 0.1),
+        totalSizeMB: statsData?.databases?.totalSizeMB || 0,
+        averageSizeMB: statsData?.databases?.averageSizeMB || 0
       };
       setStats(databaseStats);
     } catch (error) {
       console.error("სტატისტიკის ჩატვირთვა ვერ მოხერხდა:", error);
     }
-  };  const handleCreateDatabase = async () => {
+  };const handleCreateDatabase = async () => {
     try {
       const data = await adminApi.createDatabase(createForm);
       toast.success(data.message);
@@ -260,12 +243,7 @@ const DatabaseManagementPage = () => {
     if (selectedDatabases.length === 0) {
       toast.error("აირჩიეთ მინიმუმ ერთი ბაზა");
       return;
-    }
-
-    switch (action) {
-      case 'backup':
-        router.push(`/admin/backup?databases=${selectedDatabases.join(',')}&action=batch-backup`);
-        break;
+    }    switch (action) {
       case 'health-check':
         toast.success(`ჯანმრთელობის შემოწმება დაიწყო ${selectedDatabases.length} ბაზისთვის`);
         setTimeout(() => {
@@ -316,37 +294,56 @@ const DatabaseManagementPage = () => {
     }
   };
 
-  const handleQuickBackup = async (databaseName: string) => {
-    router.push(`/admin/backup?database=${databaseName}&action=backup`);
-  };
-
-  const handleRestore = (databaseName: string) => {
-    router.push(`/admin/backup?database=${databaseName}&action=restore`);
-  };
-
-  const handleCloneDatabase = async () => {
-    if (!selectedDatabase) return;
-
-    try {
-      const newName = `${selectedDatabase.databaseName}_copy_${Date.now()}`;
-      toast.success(`ბაზა "${selectedDatabase.databaseName}" კოპირდება როგორც "${newName}"`);
-      setIsCloneDialogOpen(false);
-      setSelectedDatabase(null);
-      
-      setTimeout(() => {
-        fetchDatabases();
-        fetchStats();
-      }, 2000);
-    } catch (error) {
-      toast.error("ბაზის კოპირება ვერ მოხერხდა");
-      console.error(error);
-    }
-  };
-
   const handleViewDetails = (database: DatabaseInfo) => {
     router.push(`/admin/databases/${encodeURIComponent(database.databaseName)}`);
   };
 
+  const handleQuickBackup = async (databaseName: string) => {
+    if (!confirm(`ნამდვილად გსურთ "${databaseName}" ბაზის ბექაპი?`)) return;
+    
+    try {
+      setIsLoading(true);
+      const result = await backupApi.createManualBackup(databaseName, '1'); // Using default connection ID
+      toast.success(`ბაზა "${databaseName}" წარმატებით შექმნა ბექაპი`);
+      // Optionally refresh databases to show updated backup status
+      fetchDatabases();
+    } catch (error: any) {
+      if (error.response?.status === 429) {
+        toast.error('ძალიან ბევრი მოთხოვნა. გთხოვთ ცოტა ხანში სცადოთ');
+      } else {
+        toast.error(`ბაზის "${databaseName}" ბექაპის შეცდომა`);
+      }
+      console.error('Error creating quick backup:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRename = async () => {
+    if (!selectedDatabase || !newDatabaseName.trim()) return;
+    
+    if (newDatabaseName === selectedDatabase.databaseName) {
+      toast.error("ახალი სახელი იგივეა რაც ძველი");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await databaseApi.rename(selectedDatabase.databaseName, newDatabaseName.trim());
+      toast.success(`ბაზა "${selectedDatabase.databaseName}" წარმატებით გადაარქვა როგორც "${newDatabaseName}"`);
+      setIsRenameDialogOpen(false);
+      setSelectedDatabase(null);
+      setNewDatabaseName("");
+      // Refresh databases list to show the renamed database
+      fetchDatabases();
+      fetchStats();
+    } catch (error: any) {
+      toast.error(`ბაზის გადარქმევა ვერ მოხერხდა: ${error.message || error}`);
+      console.error('Error renaming database:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
   // Filter databases
   const filteredDatabases = databases.filter(db => {
     const matchesSearch = !searchTerm || 
@@ -483,20 +480,6 @@ const DatabaseManagementPage = () => {
 
             <Card className="hover:shadow-md transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">სარეზერვო ასლები</CardTitle>
-                <Archive className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.withBackups}</div>
-                <div className="flex items-center mt-1">
-                  <span className="text-xs text-green-600 mr-2">✓ {stats.withBackups}</span>
-                  <span className="text-xs text-red-600">✗ {stats.withoutBackups}</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="hover:shadow-md transition-shadow">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">გაფრთხილებები</CardTitle>
                 <AlertTriangle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
@@ -576,17 +559,7 @@ const DatabaseManagementPage = () => {
                 განახლება
               </Button>
             </div>
-          </div>
-
-          <div className="flex flex-wrap gap-2 pt-2 border-t">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleBulkAction('backup', filteredDatabases.map(db => db.databaseName))}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              ყველას ბექაპი
-            </Button>
+          </div>          <div className="flex flex-wrap gap-2 pt-2 border-t">
             <Button
               variant="outline"
               size="sm"
@@ -604,8 +577,7 @@ const DatabaseManagementPage = () => {
               შესრულების ანალიზი
             </Button>
           </div>
-        </div>
-
+        </div>        {/* Main Content */}
         {/* Database Cards View */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredDatabases.map((database) => (
@@ -635,21 +607,27 @@ const DatabaseManagementPage = () => {
                       }}>
                         <Eye className="w-4 h-4 mr-2" />
                         დეტალები
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => {
-                        e.stopPropagation();
-                        handleQuickBackup(database.databaseName);
-                      }}>
+                      </DropdownMenuItem>                      <DropdownMenuItem 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleQuickBackup(database.databaseName);
+                        }}
+                        disabled={isLoading}
+                      >
                         <Download className="w-4 h-4 mr-2" />
-                        ბექაპი
+                        {isLoading ? "ბექაპი იქმნება..." : "ბექაპი"}
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedDatabase(database);
-                        setIsCloneDialogOpen(true);
-                      }}>
-                        <Copy className="w-4 h-4 mr-2" />
-                        კოპირება
+                      <DropdownMenuItem 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedDatabase(database);
+                          setNewDatabaseName(database.databaseName);
+                          setIsRenameDialogOpen(true);
+                        }}
+                        disabled={isLoading}
+                      >
+                        <Edit className="w-4 h-4 mr-2" />
+                        გადარქმევა
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem 
@@ -715,14 +693,10 @@ const DatabaseManagementPage = () => {
                       {database.health.issues[0]}
                       {database.health.issues.length > 1 && ` (+${database.health.issues.length - 1})`}
                     </div>
-                  </div>
-                )}
+                  </div>                )}
               </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Create Database Dialog */}
+            </Card>          ))}
+        </div>        {/* Create Database Dialog */}
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -783,25 +757,64 @@ const DatabaseManagementPage = () => {
               </Button>
               <Button onClick={handleCreateDatabase}>შექმნა</Button>
             </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          </DialogContent>        </Dialog>
 
-        {/* Clone Database Dialog */}
-        <Dialog open={isCloneDialogOpen} onOpenChange={setIsCloneDialogOpen}>
+        {/* Rename Database Dialog */}
+        <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>ბაზის კოპირება</DialogTitle>
+              <DialogTitle>ბაზის გადარქმევა</DialogTitle>
               <DialogDescription>
-                ნამდვილად გსურთ "{selectedDatabase?.databaseName}" ბაზის კოპირება?
+                შეცვალეთ "{selectedDatabase?.databaseName}" ბაზის სახელი
               </DialogDescription>
             </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="newDatabaseName">ახალი სახელი</Label>                <Input
+                  id="newDatabaseName"
+                  value={newDatabaseName}
+                  onChange={(e) => setNewDatabaseName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newDatabaseName.trim() && !isLoading) {
+                      handleRename();
+                    }
+                  }}
+                  placeholder="მიუთითეთ ახალი სახელი"
+                  autoFocus
+                />
+              </div>
+            </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCloneDialogOpen(false)}>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsRenameDialogOpen(false);
+                  setNewDatabaseName("");
+                  setSelectedDatabase(null);
+                }}
+                disabled={isLoading}
+              >
                 გაუქმება
               </Button>
-              <Button onClick={handleCloneDatabase}>კოპირება</Button>
+              <Button 
+                onClick={handleRename} 
+                disabled={isLoading || !newDatabaseName.trim()}
+              >
+                {isLoading ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    გადარქმევა ხდება...
+                  </>
+                ) : (
+                  <>
+                    <Edit className="w-4 h-4 mr-2" />
+                    გადარქმევა
+                  </>
+                )}
+              </Button>
             </DialogFooter>
-          </DialogContent>        </Dialog>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );

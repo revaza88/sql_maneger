@@ -40,12 +40,24 @@ export const authenticate = async (
       req.user = decoded;
       console.log('Token verified successfully for user:', decoded.email);
       next();
-    } catch (jwtError) {
+    } catch (jwtError: any) {
       console.error('JWT verification failed:', jwtError);
-      res.status(401).json({ 
-        status: 'error',
-        message: 'Authentication failed: Invalid token'
-      });
+      
+      // Check if it's a token expiration error
+      if (jwtError.name === 'TokenExpiredError') {
+        res.status(401).json({ 
+          status: 'error',
+          message: 'Token expired',
+          code: 'TOKEN_EXPIRED',
+          expiredAt: jwtError.expiredAt
+        });
+      } else {
+        res.status(401).json({ 
+          status: 'error',
+          message: 'Authentication failed: Invalid token',
+          code: 'INVALID_TOKEN'
+        });
+      }
       return;
     }
   } catch (error: any) {

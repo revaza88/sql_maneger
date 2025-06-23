@@ -29,19 +29,58 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle auth errors
+// Handle auth errors and token refresh
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+    
     if (error.response?.status === 429) {
       console.error('Rate limit exceeded. Headers:', error.response.headers);
       console.error('Request URL:', error.config?.url);
     }
-    if (error.response?.status === 401) {
-      useAuthStore.getState().clearAuth()
-      window.location.href = '/login'
+    
+    if (error.response?.status === 401 && error.response?.data?.code === 'TOKEN_EXPIRED' && !originalRequest._retry) {
+      originalRequest._retry = true;
+      
+      try {
+        // Try to refresh the token
+        const authStorage = localStorage.getItem('auth-storage');
+        if (authStorage) {
+          const parsed = JSON.parse(authStorage);
+          const oldToken = parsed.state?.token;
+          
+          if (oldToken) {
+            // Make refresh request with old token
+            const refreshResponse = await axios.post(`${API_URL}/auth/refresh`, {}, {
+              headers: { Authorization: `Bearer ${oldToken}` }
+            });
+            
+            const { token, user } = refreshResponse.data;
+            
+            // Update auth store with new token
+            useAuthStore.getState().setAuth(user, token);
+            
+            // Retry original request with new token
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            return api(originalRequest);
+          }
+        }
+      } catch (refreshError) {
+        console.error('Token refresh failed:', refreshError);
+        // Refresh failed, redirect to login
+        useAuthStore.getState().clearAuth();
+        window.location.href = '/admin/login';
+        return Promise.reject(refreshError);
+      }
     }
-    return Promise.reject(error)
+    
+    if (error.response?.status === 401) {
+      useAuthStore.getState().clearAuth();
+      window.location.href = '/admin/login';
+    }
+    
+    return Promise.reject(error);
   }
 )
 
@@ -52,6 +91,10 @@ export const authApi = {
   },
   register: async (email: string, password: string, name: string) => {
     const response = await api.post('/auth/register', { email, password, name }); // Removed /api
+    return response.data;
+  },
+  refresh: async () => {
+    const response = await api.post('/auth/refresh', {});
     return response.data;
   },
 };
@@ -183,6 +226,27 @@ export const databaseApi = {
     });
     return response.data;
   },
+  
+  rename: async (oldName: string, newName: string) => {
+    // Mock implementation until backend endpoint is ready
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({
+          status: 'success',
+          message: `Database renamed from ${oldName} to ${newName}`,
+          data: {
+            oldName,
+            newName,
+            timestamp: new Date().toISOString()
+          }
+        });
+      }, 1500); // Simulate 1.5 seconds of processing time
+    });
+    
+    // Real API call (commented until backend implements this endpoint)
+    // const response = await api.put(`/databases/${oldName}/rename`, { newName });
+    // return response.data;
+  },
 }
 
 // Add User interface
@@ -288,6 +352,10 @@ export const adminApi = {
   },
   backupDatabase: async (databaseName: string) => {
     const response = await api.post(`/admin/databases/${encodeURIComponent(databaseName)}/backup`, {});
+    return response.data;
+  },
+  getDatabaseDetails: async (databaseName: string) => {
+    const response = await api.get(`/admin/databases/${encodeURIComponent(databaseName)}/details`);
     return response.data;
   },
 };

@@ -7,6 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { toast } from 'sonner';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { adminApi, databaseApi, backupApi } from '@/lib/api';
 import { 
   Database, 
   Activity, 
@@ -45,20 +48,28 @@ const DatabaseDetailPage = () => {
   const [database, setDatabase] = useState<DatabaseDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const { token } = useAuthStore();
   useEffect(() => {
-    fetchDatabaseDetails();
-  }, [databaseName]);
+    if (token) {
+      fetchDatabaseDetails();
+    }
+  }, [databaseName, token]);  const fetchDatabaseDetails = async () => {
+    if (!token) {
+      toast.error('Authentication required');
+      return;
+    }
 
-  const fetchDatabaseDetails = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/admin/databases/${databaseName}`);
-      if (response.ok) {
-        const data = await response.json();
+      try {
+        // Try to fetch from API first
+        const data = await adminApi.getDatabaseDetails(databaseName);
         setDatabase(data);
-      } else {
-        // Mock data for demonstration
+        toast.success('Database details loaded');
+      } catch (apiError) {
+        // Fallback to mock data for demonstration
+        console.log('API not available, using mock data');
         setDatabase({
           name: decodeURIComponent(databaseName),
           status: 'online',
@@ -80,28 +91,47 @@ const DatabaseDetailPage = () => {
       }
     } catch (error) {
       console.error('Error fetching database details:', error);
+      toast.error('Failed to load database details');
     } finally {
       setLoading(false);
     }
   };
-
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    toast.info('Refreshing database details...');
     await fetchDatabaseDetails();
     setIsRefreshing(false);
+  };  const handleQuickBackup = async () => {
+    if (!token) {
+      toast.error('Authentication required');
+      return;
+    }
+
+    if (!confirm(`ნამდვილად გსურთ "${databaseName}" ბაზის ბექაპი?`)) return;
+
+    setIsBackingUp(true);
+    try {      // Use the same API as the global backup page for consistency
+      const result = await backupApi.createManualBackup(databaseName, '1'); // Using default connection ID
+      toast.success(`ბაზა "${databaseName}" წარმატებით შექმნა ბექაპი`);
+      
+      // Refresh database details to update last backup time
+      setTimeout(() => {
+        fetchDatabaseDetails();
+      }, 2000); // Give backup a moment to register
+    } catch (error: any) {
+      console.error('Error creating quick backup:', error);
+      if (error.response?.status === 429) {
+        toast.error('ძალიან ბევრი მოთხოვნა. გთხოვთ ცოტა ხანში სცადოთ');
+      } else {
+        toast.error(`ბაზის "${databaseName}" ბექაპის შეცდომა`);
+      }
+    } finally {
+      setIsBackingUp(false);
+    }
   };
 
-  const handleQuickBackup = async () => {
-    try {
-      const response = await fetch(`/api/admin/databases/${databaseName}/backup`, {
-        method: 'POST'
-      });
-      if (response.ok) {
-        alert('Backup started successfully');
-      }
-    } catch (error) {
-      console.error('Error starting backup:', error);
-    }
+  const handleSettings = () => {
+    toast.info('Database settings functionality coming soon');
   };
 
   const getStatusBadge = (status: string) => {
@@ -180,23 +210,23 @@ const DatabaseDetailPage = () => {
                 Size: {formatBytes(database.size_mb * 1024 * 1024)}
               </span>
             </div>
-          </div>
-          <div className="flex gap-2">
+          </div>          <div className="flex gap-2">
             <Button 
               variant="outline" 
               onClick={handleRefresh}
               disabled={isRefreshing}
             >
               <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-              Refresh
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
             </Button>
             <Button 
               variant="outline"
               onClick={handleQuickBackup}
+              disabled={isBackingUp}
             >
-              Quick Backup
+              {isBackingUp ? 'Backing up...' : 'Quick Backup'}
             </Button>
-            <Button variant="outline">
+            <Button variant="outline" onClick={handleSettings}>
               <Settings className="w-4 h-4 mr-2" />
               Settings
             </Button>
@@ -295,9 +325,7 @@ const DatabaseDetailPage = () => {
                 <div className="text-sm">{getStatusBadge(database.status)}</div>
               </div>
             </CardContent>
-          </Card>
-
-          <Card>
+          </Card>          <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Clock className="w-5 h-5" />
@@ -313,9 +341,25 @@ const DatabaseDetailPage = () => {
                 <label className="text-sm font-medium text-gray-500">Created</label>
                 <p className="text-sm">{formatDate(database.createdAt)}</p>
               </div>
-              <div className="pt-2">
-                <Button onClick={handleQuickBackup} className="w-full">
-                  Create Backup Now
+              <div>
+                <label className="text-sm font-medium text-gray-500">Backup Location</label>
+                <p className="text-sm text-blue-600">Unified Backup Management</p>
+                <p className="text-xs text-gray-500">Backups created here will appear in Admin → Backup Management</p>
+              </div>
+              <div className="pt-2 space-y-2">
+                <Button 
+                  onClick={handleQuickBackup} 
+                  className="w-full"
+                  disabled={isBackingUp}
+                >
+                  {isBackingUp ? 'Creating Backup...' : 'Create Backup Now'}
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => window.open('/admin/backup', '_blank')} 
+                  className="w-full"
+                >
+                  View All Backups
                 </Button>
               </div>
             </CardContent>

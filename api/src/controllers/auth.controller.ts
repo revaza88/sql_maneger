@@ -138,4 +138,49 @@ export class AuthController {
       next(error);
     }
   }
+
+  async refreshToken(req: Request, res: Response, next: NextFunction): Promise<Response> {
+    try {
+      const userId = (req as any).user?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: 'Authentication required' });
+      }
+
+      // Get user from database to ensure they still exist and are active
+      const user = await UserModel.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      if (user.isBlocked) {
+        return res.status(403).json({ message: 'User account is blocked' });
+      }
+
+      if (user.isPaused) {
+        return res.status(403).json({ message: 'User account is paused' });
+      }
+
+      // Generate new token
+      const token = jwt.sign(
+        { id: user.id, email: user.email, role: user.role },
+        config.jwt.secret as string,
+        { expiresIn: config.jwt.expiresIn } as SignOptions
+      );
+
+      return res.json({
+        message: 'Token refreshed successfully',
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role
+        }
+      });
+    } catch (error) {
+      console.error('Token refresh error:', error);
+      next(error);
+    }
+  }
 }

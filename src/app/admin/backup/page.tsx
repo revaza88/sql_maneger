@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { Trash2, Database, Download, Plus, Search, RefreshCw, Archive, Play, AlertTriangle, FileText, HardDrive } from 'lucide-react';
-import { backupApi } from '@/lib/api';
+import { backupApi, databaseApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useRouter } from 'next/navigation';
 import { LoadingSpinner } from '@/components/loading-spinner';
@@ -113,7 +113,6 @@ export default function BackupManagement() {
     newDatabaseName: '',
     connectionId: '1'
   });
-
   useEffect(() => {
     if (token) {
       loadData();
@@ -123,15 +122,52 @@ export default function BackupManagement() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [configsRes, filesRes, databasesRes, batchBackupsRes] = await Promise.all([
-        backupApi.getConfigs(),
-        backupApi.getFiles(),
-        backupApi.getDatabases('1'), // Default connection
-        backupApi.getBatchBackups()
-      ]);
+      const promises = [
+        backupApi.getConfigs().catch(() => []),
+        backupApi.getFiles().catch(() => []),
+        backupApi.getDatabases('1').catch(() => []), // Default connection
+        backupApi.getBatchBackups().catch(() => [])
+      ];
+
+      // Also try to load database backup history to unify all backups
+      try {
+        const historyRes = await databaseApi.getBackupHistory();
+        promises.push(Promise.resolve(historyRes));
+      } catch {
+        promises.push(Promise.resolve([]));
+      }
+
+      const [configsRes, filesRes, databasesRes, batchBackupsRes, historyRes] = await Promise.all(promises);
 
       setBackupConfigs(configsRes || []);
-      setBackupFiles(filesRes || []);
+      
+      // Merge backup files from both sources for unified view
+      const unifiedFiles = [...(filesRes || [])];
+      
+      // Add database backup history items if they don't already exist
+      if (historyRes && Array.isArray(historyRes)) {
+        historyRes.forEach((historyItem: any) => {
+          const exists = unifiedFiles.some(f => 
+            f.database === historyItem.databaseName && 
+            f.fileName === historyItem.backupFile
+          );
+          
+          if (!exists) {
+            unifiedFiles.push({
+              id: `history_${historyItem.databaseName}_${Date.now()}`,
+              database: historyItem.databaseName,
+              fileName: historyItem.backupFile,
+              filePath: historyItem.backupFile,
+              size: (historyItem.sizeInMB || 0) * 1024 * 1024,
+              createdAt: historyItem.finishTime || historyItem.startTime,
+              type: 'manual' as const,
+              owner: undefined
+            });
+          }
+        });
+      }
+      
+      setBackupFiles(unifiedFiles);
       setDatabases(databasesRes || []);
       setBatchBackups(batchBackupsRes || []);
     } catch (error) {
@@ -425,7 +461,62 @@ export default function BackupManagement() {
       description="მართეთ ავტომატური და ხელით ბექაპები"
       icon={<Archive className="h-6 w-6 text-blue-600" />}
     >
-      <div className="max-w-7xl mx-auto space-y-6"><Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* ბექაპის მთავარი მეტრიკები */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card className="bg-gradient-to-r from-blue-50 to-blue-100 border-blue-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-blue-600 text-sm font-medium">ბაჩ ბექაპები</p>
+                  <p className="text-3xl font-bold text-blue-900">{batchBackups.length}</p>
+                </div>
+                <Archive className="h-8 w-8 text-blue-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-r from-green-50 to-green-100 border-green-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-green-600 text-sm font-medium">ინდივიდუალური ფაილები</p>
+                  <p className="text-3xl font-bold text-green-900">{backupFiles.length}</p>
+                </div>
+                <FileText className="h-8 w-8 text-green-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-r from-purple-50 to-purple-100 border-purple-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-purple-600 text-sm font-medium">სულ ბაზები</p>
+                  <p className="text-3xl font-bold text-purple-900">{databases.length}</p>
+                </div>
+                <Database className="h-8 w-8 text-purple-600" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-orange-600 text-sm font-medium">ავტომატური განრიგები</p>
+                  <p className="text-3xl font-bold text-orange-900">{backupConfigs.filter(c => c.enabled).length}</p>
+                  <p className="text-xs text-orange-600">
+                    ({backupConfigs.filter(c => !c.enabled).length} გამორთული)
+                  </p>
+                </div>
+                <Play className="h-8 w-8 text-orange-600" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader className="space-y-3">
               <DialogTitle className="flex items-center gap-2">
@@ -510,11 +601,12 @@ export default function BackupManagement() {
             </div>
           </DialogContent>
         </Dialog>
-      </div>      <Tabs defaultValue="quick" className="space-y-8">        <TabsList className="grid w-full grid-cols-4 lg:w-[600px]">
+      </div>      <Tabs defaultValue="all" className="space-y-8">
+        <TabsList className="grid w-full grid-cols-4 lg:w-[600px]">
+          <TabsTrigger value="all">📂 ყველა ბექაპი</TabsTrigger>
           <TabsTrigger value="quick">⚡ სწრაფი ბექაპი</TabsTrigger>
           <TabsTrigger value="automatic">📦 ბაჩ ბექაპები</TabsTrigger>
           <TabsTrigger value="schedule">⚙️ განრიგი</TabsTrigger>
-          <TabsTrigger value="all">📂 ყველა ბექაპი</TabsTrigger>
         </TabsList>
 
         <TabsContent value="quick">
@@ -843,70 +935,94 @@ export default function BackupManagement() {
                   </div>
                 )}
               </CardContent>
-            </Card>
-
-            {/* ინდივიდუალური ბექაპ ფაილები */}
+            </Card>            {/* ინდივიდუალური ბექაპ ფაილები */}
             <Card>
               <CardHeader>
-                <CardTitle>💾 ინდივიდუალური ბექაპ ფაილები</CardTitle>
-                <CardDescription>
-                  კონკრეტული ბაზების ცალკეული ბექაპ ფაილები
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>💾 ინდივიდუალური ბექაპ ფაილები</CardTitle>
+                    <CardDescription>
+                      კონკრეტული ბაზების ცალკეული ბექაპ ფაილები (მათ შორის database details გვერდიდან შექმნილი)
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={loadData}
+                    disabled={loading}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                    განახლება
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>ბაზა</TableHead>
-                      <TableHead>ფაილის სახელი</TableHead>
-                      <TableHead>მოცულობა</TableHead>
-                      <TableHead>თარიღი</TableHead>
-                      <TableHead>ტიპი</TableHead>
-                      <TableHead>მოქმედებები</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {backupFiles.map((file) => (
-                      <TableRow key={file.id}>
-                        <TableCell className="font-medium">{file.database}</TableCell>
-                        <TableCell className="font-mono text-xs">{file.fileName}</TableCell>
-                        <TableCell>{(file.size / 1024 / 1024).toFixed(2)} MB</TableCell>
-                        <TableCell>{formatDate(file.createdAt)}</TableCell>
-                        <TableCell>
-                          <Badge variant={file.type === 'manual' ? 'default' : 'secondary'}>
-                            {file.type === 'manual' ? 'ხელით' : 'ავტომატური'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex space-x-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setSelectedBackupFile(file);
-                                setIsRestoreDialogOpen(true);
-                              }}
-                            >
-                              აღდგენა
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => deleteBackupFile(file.id)}
-                              disabled={loading}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {backupFiles.length === 0 && (
+                {backupFiles.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground">
-                    ინდივიდუალური ბექაპ ფაილები არ მოიძებნა
+                    <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>ინდივიდუალური ბექაპ ფაილები არ მოიძებნა</p>
+                    <p className="text-sm mt-2">შექმენით backup database detail გვერდიდან ან manual backup tab-იდან</p>
                   </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>ბაზა</TableHead>
+                        <TableHead>ფაილის სახელი</TableHead>
+                        <TableHead>მოცულობა</TableHead>
+                        <TableHead>შექმნის თარიღი</TableHead>
+                        <TableHead>ტიპი</TableHead>
+                        <TableHead>წყარო</TableHead>
+                        <TableHead>მოქმედებები</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {backupFiles.map((file) => (
+                        <TableRow key={file.id}>
+                          <TableCell className="font-medium">{file.database}</TableCell>
+                          <TableCell className="font-mono text-xs max-w-[200px] truncate" title={file.fileName}>
+                            {file.fileName}
+                          </TableCell>
+                          <TableCell>{(file.size / 1024 / 1024).toFixed(2)} MB</TableCell>
+                          <TableCell>{formatDate(file.createdAt)}</TableCell>
+                          <TableCell>
+                            <Badge variant={file.type === 'manual' ? 'default' : 'secondary'}>
+                              {file.type === 'manual' ? 'ხელით' : 'ავტომატური'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">
+                              {file.id.startsWith('history_') ? 'Database Detail' : 'Backup API'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex space-x-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedBackupFile(file);
+                                  setIsRestoreDialogOpen(true);
+                                }}
+                              >
+                                აღდგენა
+                              </Button>
+                              {!file.id.startsWith('history_') && (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => deleteBackupFile(file.id)}
+                                  disabled={loading}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 )}
               </CardContent>
             </Card>
@@ -1113,31 +1229,51 @@ export default function BackupManagement() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="manual">
+        </TabsContent>        <TabsContent value="manual">
           <Card>
             <CardHeader>
               <CardTitle>ხელით ბექაპის შექმნა</CardTitle>
               <CardDescription>
-                შექმენით ცალკეული ბაზების ბექაპები
+                შექმენით ცალკეული ბაზების ბექაპები. ასეთი ბექაპები გამოჩნდება "ყველა ბექაპი" tab-ში ინდივიდუალური ფაილების სექციაში.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {databases.map((database) => (
-                  <Card key={database} className="p-4">
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-medium">{database}</h3>
-                      <Button
-                        size="sm"
-                        onClick={() => createManualBackup(database)}
-                      >
-                        ბექაპი
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
+              {databases.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Database className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>მონაცემთა ბაზები არ მოიძებნა</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {databases.map((database) => (
+                    <Card key={database} className="p-4 hover:shadow-md transition-shadow">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h3 className="font-medium">{database}</h3>
+                          <p className="text-sm text-gray-500 mt-1">
+                            ცალკეული backup
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => createManualBackup(database)}
+                          disabled={loading}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          <HardDrive className="h-4 w-4 mr-1" />
+                          ბექაპი
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+              
+              <div className="mt-6 p-4 bg-blue-50 rounded-lg">
+                <h4 className="font-medium text-blue-900 mb-2">💡 რჩევა</h4>
+                <p className="text-sm text-blue-800">
+                  ასევე შეგიძლიათ ბექაპის შექმნა მონაცემთა ბაზის დეტალების გვერდიდან - იგივე databaseApi.backup() გამოიყენება და backup files ერთნაირად გამოჩნდება.
+                </p>
               </div>
             </CardContent>
           </Card>
