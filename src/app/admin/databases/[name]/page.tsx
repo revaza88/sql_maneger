@@ -290,10 +290,9 @@ const DatabaseDetailPage = () => {
               <div>
                 <label className="text-sm font-medium text-gray-500">Size</label>
                 <p className="text-sm">{formatBytes(database.size_mb * 1024 * 1024)}</p>
-              </div>
-              <div>
+              </div>              <div>
                 <label className="text-sm font-medium text-gray-500">Status</label>
-                <p className="text-sm">{getStatusBadge(database.status)}</p>
+                <div className="text-sm">{getStatusBadge(database.status)}</div>
               </div>
             </CardContent>
           </Card>
